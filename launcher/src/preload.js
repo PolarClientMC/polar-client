@@ -88,6 +88,14 @@ contextBridge.exposeInMainWorld('polar', {
     list: () => call('versions:list'),
     select: (id) => call('versions:select', id),
   },
+  profiles: {
+    list: () => call('profiles:list'),
+    select: (id) => call('profiles:select', id),
+    save: (fields) => call('profiles:save', fields),
+    duplicate: (id) => call('profiles:duplicate', id),
+    remove: (id, withFolder) => call('profiles:remove', { id, withFolder: Boolean(withFolder) }),
+    openFolder: (id) => call('profiles:openFolder', id),
+  },
   servers: {
     list: () => call('servers:list'),
     add: (server) => call('servers:add', server),

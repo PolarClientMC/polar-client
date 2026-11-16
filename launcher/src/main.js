@@ -19,6 +19,7 @@ const news = require('./core/news');
 const { SkinLibrary, pngFromDataUrl } = require('./core/skins');
 const { DiscordPresence, activityFor } = require('./core/discord');
 const { PolarService } = require('./core/polar');
+const { Profiles, COLORS: PROFILE_COLORS } = require('./core/profiles');
 
 const POLAR_CONFIG = require('../package.json').polar || {};
 /** GitHub repository the launcher updates itself from ("owner/name" in package.json > polar.updateRepo). */
@@ -64,6 +65,8 @@ const polar = new PolarService({
   onEvent: (msg) => send('polar:event', msg),
 });
 const polarSync = () => store.getSettings().polarSync !== false;
+/** Profiles: what Play starts (a version, its game folder, mods and memory). */
+const launchProfiles = new Profiles(ROOT, { settings: () => store.getSettings() });
 
 let win = null;
 let hiddenForGame = false;
@@ -256,19 +259,107 @@ function handle(channel, fn) {
   });
 }
 
-/** The Minecraft version picked in the launcher's version dropdown. */
-const selectedVersion = () => catalog.versionInfo(store.getSettings().gameVersion);
-const versionsState = () => ({ selected: selectedVersion().id, versions: catalog.listVersions(ROOT) });
+/** The profile Play starts, and its Minecraft version. */
+const activeProfile = () => launchProfiles.active();
+const selectedVersion = () => catalog.versionInfo(activeProfile().version);
+const versionsState = () => ({ selected: selectedVersion().id, profile: activeProfile().id, versions: catalog.listVersions(ROOT) });
+/** The active profile's game folder (its own one, or its version's); created on first use. */
+const gameDir = () => launchProfiles.prepareDir(activeProfile());
+/** The Mods-page mods of the active profile (the launcher's own list for the version profiles). */
+const currentMods = () => launchProfiles.modsOf(activeProfile());
+async function setCurrentMods(list) {
+  const p = activeProfile();
+  const next = [...new Set(list)];
+  if (p.builtIn) await store.setSettings({ optionalMods: next });
+  else await launchProfiles.setMods(p.id, next);
+  return next;
+}
+/** Mod profiles (saved mod sets) are kept per version; which one is on is kept per profile. */
+const packKey = () => (activeProfile().builtIn ? selectedVersion().id : activeProfile().id);
+
+function profilesState() {
+  const data = launchProfiles.read();
+  const active = launchProfiles.active(data);
+  const versions = catalog.listVersions(ROOT);
+  return {
+    selected: active.id,
+    colors: PROFILE_COLORS,
+    defaults: { memoryGb: store.getSettings().memoryGb },
+    versions,
+    profiles: launchProfiles.all(data).map((p) => {
+      const v = versions.find((x) => x.id === p.version) || catalog.versionInfo(p.version);
+      return { ...p, optionalMods: undefined, mods: launchProfiles.modsOf(p).length, loaderName: v.loaderName, polar: v.polar,
+        installed: v.installed, folderMade: fs.existsSync(launchProfiles.dirOf(p)), worlds: !p.builtIn && p.folder === 'own' && launchProfiles.hasWorlds(p) };
+    }),
+  };
+}
+/** After the profile changed: the new folder's servers, Discord and the page. */
+async function profileChanged() {
+  await gameDir();
+  send('servers:changed'); // every game folder has its own server list
+  if (!run) updatePresence();
+}
 
 handle('app:info', () => ({ version: app.getVersion(), gameVersion: selectedVersion().id, platform: process.platform, root: ROOT, bundledMod: fs.existsSync(bundledJar(selectedVersion().id)), discord: discord.configured }));
 handle('versions:list', () => versionsState());
 handle('versions:select', async (id) => {
   if (!catalog.VERSIONS.some((v) => v.id === id)) throw new Error(`Minecraft ${id} isn't offered by this launcher.`);
   await store.setSettings({ gameVersion: id });
-  await catalog.prepareGameDir(ROOT, id);
-  send('servers:changed'); // every version has its own server list
-  if (!run) updatePresence();
+  await launchProfiles.select(`v-${id}`);
+  await profileChanged();
   return versionsState();
+});
+
+// ---------------------------------------------------------------- profiles
+handle('profiles:list', () => profilesState());
+handle('profiles:select', async (id) => {
+  const p = await launchProfiles.select(String(id || ''));
+  if (p.builtIn) await store.setSettings({ gameVersion: p.version });
+  await profileChanged();
+  return { profiles: profilesState(), versions: versionsState() };
+});
+/** Makes a profile or changes one; a profile with its own folder that moves to another version gets its Browse mods for it. */
+handle('profiles:save', async (fields = {}) => {
+  const f = fields && typeof fields === 'object' ? fields : {};
+  const before = f.id ? launchProfiles.get(String(f.id)) : null;
+  if (before && game.running && run && run.profile === before.id && f.version && f.version !== before.version) {
+    throw new Error(`Close Minecraft before moving ${before.name} to another version.`);
+  }
+  const saved = await launchProfiles.save({ ...f, id: f.id ? String(f.id) : undefined });
+  const moved = { updated: [], removed: [] };
+  if (before && saved.folder === 'own' && saved.version !== before.version && fs.existsSync(launchProfiles.dirOf(saved))) {
+    const v = catalog.versionInfo(saved.version);
+    const loader = v.loader === 'legacy-fabric' ? 'legacy-fabric' : 'fabric';
+    const dir = launchProfiles.dirOf(saved);
+    for (const e of (await modrinth.list({ gameDir: dir })).added) {
+      try {
+        await modrinth.install({ gameDir: dir, gameVersion: v.id, loader, project: { id: e.projectId, slug: e.slug, title: e.title, icon: e.icon, author: e.author } });
+        moved.updated.push(e.title);
+      } catch {
+        await modrinth.remove({ gameDir: dir, projectId: e.projectId }).catch(() => {});
+        moved.removed.push(e.title);
+      }
+    }
+  }
+  if (activeProfile().id === saved.id) await profileChanged();
+  return { profile: saved, moved, profiles: profilesState(), versions: versionsState() };
+});
+handle('profiles:duplicate', async (id) => {
+  const p = await launchProfiles.duplicate(String(id || ''));
+  await profileChanged();
+  return { profile: p, profiles: profilesState(), versions: versionsState() };
+});
+handle('profiles:remove', async ({ id, withFolder } = {}) => {
+  if (run && run.profile === id && withFolder) throw new Error('Close Minecraft before deleting the folder of the profile you are playing.');
+  const res = await launchProfiles.remove(String(id || ''), { withFolder: Boolean(withFolder) });
+  await profileChanged();
+  return { ...res, selected: undefined, profiles: profilesState(), versions: versionsState() };
+});
+handle('profiles:openFolder', async (id) => {
+  const p = launchProfiles.get(String(id || ''));
+  if (!p) throw new Error('That profile is gone.');
+  const err = await shell.openPath(await launchProfiles.prepareDir(p));
+  if (err) throw new Error(err);
 });
 handle('accounts:list', () => store.listAccounts());
 handle('accounts:login', async () => {
@@ -293,13 +384,15 @@ handle('accounts:remove', async (uuid) => {
   polar.connect();
   return store.listAccounts();
 });
-handle('settings:get', () => store.getSettings());
-handle('settings:set', (patch) => {
+// the Mods page shows and changes the active profile's mods
+handle('settings:get', () => ({ ...store.getSettings(), optionalMods: currentMods() }));
+handle('settings:set', async (patch) => {
   // the launcher itself keeps the recent-server list and the version choice; don't let a stale page copy overwrite them
-  const { recentServers, gameVersion, modProfiles, activeModProfile, ...rest } = patch || {};
-  const saved = store.setSettings(rest);
-  if ('discordStatus' in rest) Promise.resolve(saved).then(updatePresence, () => {});
-  return saved;
+  const { recentServers, gameVersion, modProfiles, activeModProfile, optionalMods, ...rest } = patch || {};
+  if (Array.isArray(optionalMods)) await setCurrentMods(optionalMods.map(String));
+  const saved = await store.setSettings(rest);
+  if ('discordStatus' in rest) updatePresence();
+  return { ...saved, optionalMods: currentMods() };
 });
 handle('mods:catalog', () => OPTIONAL_MODS);
 
@@ -311,14 +404,14 @@ const browserVersion = () => {
 const isLegacy = (versionId) => /^1\.8/.test(versionId);
 async function browserState() {
   const v = selectedVersion();
-  const dir = await catalog.prepareGameDir(ROOT, v.id);
+  const dir = await gameDir();
   return {
     ...(await modrinth.list({ gameDir: dir })),
     packs: await modrinth.listPacks({ gameDir: dir }),
     enabledPacks: await packs.enabledResourcePacks(dir, isLegacy(v.id)),
     shader: await packs.currentShader(dir),
     shadersSupported: v.loader !== 'legacy-fabric',
-    optional: store.getSettings().optionalMods || [],
+    optional: currentMods(),
     version: v.id,
   };
 }
@@ -333,15 +426,15 @@ handle('modrinth:installPack', async (project = {}) => {
   const v = selectedVersion();
   const kind = project.kind;
   if (kind === 'shader' && v.loader === 'legacy-fabric') throw new Error("Shader packs need Iris, which doesn't run on Minecraft 1.8.9.");
-  const dir = await catalog.prepareGameDir(ROOT, v.id);
+  const dir = await gameDir();
   const { entry, replaced } = await modrinth.installPack({ gameDir: dir, gameVersion: v.id, kind, project });
   let applied = false;
   const enabled = [];
   if (kind === 'shader') {
     // shaders need Iris (which brings Sodium); it's installed with the other mods on the next Play
-    const current = store.getSettings().optionalMods || [];
+    const current = currentMods();
     if (!current.includes('iris')) {
-      await store.setSettings({ optionalMods: [...current, 'iris'] });
+      await setCurrentMods([...current, 'iris']);
       enabled.push('Iris Shaders');
     }
     if (!game.running) {
@@ -356,7 +449,7 @@ handle('modrinth:installPack', async (project = {}) => {
 });
 handle('modrinth:removePack', async ({ kind, projectId } = {}) => {
   const v = selectedVersion();
-  const dir = await catalog.prepareGameDir(ROOT, v.id);
+  const dir = await gameDir();
   const res = await modrinth.removePack({ gameDir: dir, kind, projectId });
   if (res.removed && !game.running) {
     if (kind === 'resourcepack') await packs.setResourcePack(dir, res.filename, false, isLegacy(v.id));
@@ -368,7 +461,7 @@ handle('modrinth:removePack', async ({ kind, projectId } = {}) => {
 handle('packs:toggleResource', async ({ filename, on } = {}) => {
   if (game.running) throw new Error('Close Minecraft first, or switch packs in game (Options > Resource Packs).');
   const v = selectedVersion();
-  const dir = await catalog.prepareGameDir(ROOT, v.id);
+  const dir = await gameDir();
   if (!fs.existsSync(path.join(dir, 'resourcepacks', path.basename(String(filename))))) throw new Error('That pack is gone from the folder.');
   const ok = await packs.setResourcePack(dir, path.basename(String(filename)), !!on, isLegacy(v.id));
   if (!ok) throw new Error(`Start Minecraft ${v.id} once first, then you can switch packs here (or in game).`);
@@ -377,13 +470,13 @@ handle('packs:toggleResource', async ({ filename, on } = {}) => {
 handle('packs:useShader', async (filename) => {
   if (game.running) throw new Error('Close Minecraft first, or pick a shader in game (Options > Video Settings > Shader Packs).');
   const v = selectedVersion();
-  const dir = await catalog.prepareGameDir(ROOT, v.id);
+  const dir = await gameDir();
   const name = filename ? path.basename(String(filename)) : null;
   if (name && !fs.existsSync(path.join(dir, 'shaderpacks', name))) throw new Error('That shader pack is gone from the folder.');
   await packs.setShader(dir, name);
   if (name) {
-    const current = store.getSettings().optionalMods || [];
-    if (!current.includes('iris')) await store.setSettings({ optionalMods: [...current, 'iris'] });
+    const current = currentMods();
+    if (!current.includes('iris')) await setCurrentMods([...current, 'iris']);
   }
   return browserState();
 });
@@ -391,18 +484,17 @@ handle('modrinth:installed', () => browserState());
 handle('modrinth:install', async (project) => {
   if (!project || typeof project !== 'object' || (!project.id && !project.slug)) throw new Error('Pick a mod to install.');
   const { gameVersion, loader } = browserVersion();
-  const dir = await catalog.prepareGameDir(ROOT, gameVersion);
+  const dir = await gameDir();
   const res = await modrinth.install({ gameDir: dir, gameVersion, loader, project, log: (m) => send('game:log', `[mods] ${m}`) });
   if (res.enable.length) {
-    const current = store.getSettings().optionalMods || [];
-    await store.setSettings({ optionalMods: [...new Set([...current, ...res.enable])] });
+    await setCurrentMods([...currentMods(), ...res.enable]);
   }
   const names = res.enable.map((id) => (OPTIONAL_MODS.find((m) => m.id === id) || { name: id }).name);
   return { installed: res.installed, enabled: names, state: await browserState() };
 });
 handle('modrinth:updates', async () => {
   const { gameVersion, loader } = browserVersion();
-  const dir = await catalog.prepareGameDir(ROOT, gameVersion);
+  const dir = await gameDir();
   return { version: gameVersion, updates: await modrinth.checkUpdates({ gameDir: dir, gameVersion, loader }) };
 });
 const profilesFor = (version) => ((store.getSettings().modProfiles || {})[version] || []);
@@ -411,19 +503,19 @@ async function saveProfiles(version, list) {
   all[version] = list;
   await store.setSettings({ modProfiles: all });
 }
-handle('packs:list', () => ({ version: selectedVersion().id, profiles: profilesFor(selectedVersion().id), active: (store.getSettings().activeModProfile || {})[selectedVersion().id] || null }));
+handle('packs:list', () => ({ version: selectedVersion().id, profiles: profilesFor(selectedVersion().id), active: (store.getSettings().activeModProfile || {})[packKey()] || null }));
 handle('packs:save', async (rawName) => {
   const name = String(rawName || '').trim().replace(/\s+/g, ' ').slice(0, 32);
   if (!name) throw new Error('Give the profile a name.');
   const version = selectedVersion().id;
-  const dir = await catalog.prepareGameDir(ROOT, version);
+  const dir = await gameDir();
   const added = (await modrinth.list({ gameDir: dir })).added;
-  const profile = { name, savedAt: Date.now(), optionalMods: store.getSettings().optionalMods || [],
+  const profile = { name, savedAt: Date.now(), optionalMods: currentMods(),
     mods: added.map((e) => ({ projectId: e.projectId, slug: e.slug, title: e.title, icon: e.icon, author: e.author })) };
   const list = profilesFor(version).filter((p) => p.name.toLowerCase() !== name.toLowerCase());
   if (list.length >= 20) throw new Error('You can keep up to 20 profiles per version.');
   await saveProfiles(version, [...list, profile]);
-  await store.setSettings({ activeModProfile: { ...(store.getSettings().activeModProfile || {}), [version]: name } });
+  await store.setSettings({ activeModProfile: { ...(store.getSettings().activeModProfile || {}), [packKey()]: name } });
   return { profile };
 });
 handle('packs:apply', async (name) => {
@@ -431,26 +523,24 @@ handle('packs:apply', async (name) => {
   const { gameVersion, loader } = browserVersion();
   const profile = profilesFor(gameVersion).find((p) => p.name === name);
   if (!profile) throw new Error('That profile is gone.');
-  const dir = await catalog.prepareGameDir(ROOT, gameVersion);
+  const dir = await gameDir();
   const res = await modrinth.applyProfile({ gameDir: dir, gameVersion, loader, profile, log: (m) => send('game:log', `[mods] ${m}`) });
-  await store.setSettings({ optionalMods: [...new Set([...(profile.optionalMods || []), ...res.enable])],
-    activeModProfile: { ...(store.getSettings().activeModProfile || {}), [gameVersion]: name } });
+  await setCurrentMods([...(profile.optionalMods || []), ...res.enable]);
+  await store.setSettings({ activeModProfile: { ...(store.getSettings().activeModProfile || {}), [packKey()]: name } });
   return { ...res, state: await browserState() };
 });
 handle('packs:delete', async (name) => {
   const version = selectedVersion().id;
   await saveProfiles(version, profilesFor(version).filter((p) => p.name !== name));
   const active = { ...(store.getSettings().activeModProfile || {}) };
-  if (active[version] === name) delete active[version];
+  if (active[packKey()] === name) delete active[packKey()];
   await store.setSettings({ activeModProfile: active });
 });
 handle('modrinth:remove', async (projectId) => {
-  const dir = await catalog.prepareGameDir(ROOT, selectedVersion().id);
+  const dir = await gameDir();
   const res = await modrinth.remove({ gameDir: dir, projectId });
   return { ...res, state: await browserState() };
 });
-/** Each version has its own game folder (26.3 keeps the original "instance" folder); created on first use. */
-const gameDir = () => catalog.prepareGameDir(ROOT, selectedVersion().id);
 
 /** Keeps the last 8 servers joined from the launcher, newest first. */
 function recordRecent(list, ip, name) {
@@ -462,7 +552,11 @@ handle('game:launch', async (opts = {}) => {
   if (game.running) throw new Error('The game is already running.');
   const { selected } = store.listAccounts();
   const account = await freshAccount(selected);
-  let settings = store.getSettings();
+  const p = activeProfile();
+  const base = store.getSettings();
+  // the profile's version, folder and mods, and its own memory and Java arguments when it has them
+  let settings = { ...base, gameVersion: p.version, gameDir: await gameDir(), optionalMods: currentMods(),
+    memoryGb: p.memoryGb || base.memoryGb, jvmArgs: p.jvmArgs != null ? p.jvmArgs : base.jvmArgs };
   // "Play" on a server card joins that server for this launch only
   const server = opts && typeof opts.server === 'string' ? opts.server.trim() : '';
   if (server) settings = { ...settings, quickJoin: server };
@@ -505,7 +599,8 @@ handle('game:launch', async (opts = {}) => {
     await Promise.race([polar.pullSettings(selectedVersion().id, dir), new Promise((r) => setTimeout(r, 6000))]).catch(() => {});
   }
   let result;
-  run = { dir: await gameDir(), version: selectedVersion().id, startedAt: Date.now(), log: [], killed: false };
+  run = { dir: settings.gameDir, version: selectedVersion().id, profile: p.id, startedAt: Date.now(), log: [], killed: false };
+  launchProfiles.played(p.id).catch(() => {});
   try {
     result = await game.launch(settings, account, bridge ? bridge.env : {});
   } catch (e) {
@@ -532,9 +627,12 @@ handle('crash:openReport', async () => {
 
 // ---------------------------------------------------------------- screenshots (every version's screenshots folder)
 const thumbs = new Map();
-handle('shots:list', () => screenshots.list(ROOT));
+/** Your profiles' own folders, for the screenshots page. */
+const shotFolders = () => launchProfiles.all().filter((x) => !x.builtIn && x.folder === 'own')
+  .map((x) => ({ key: x.id, dir: launchProfiles.dirOf(x), version: x.version, profile: x.name }));
+handle('shots:list', () => screenshots.list(ROOT, shotFolders()));
 handle('shots:thumb', (id) => {
-  const file = screenshots.resolve(ROOT, id);
+  const file = screenshots.resolve(ROOT, id, shotFolders());
   if (!file) throw new Error('That screenshot is gone.');
   const key = `${file}:${fs.statSync(file).mtimeMs}`;
   if (!thumbs.has(key)) {
@@ -546,7 +644,7 @@ handle('shots:thumb', (id) => {
   return thumbs.get(key);
 });
 handle('shots:full', (id) => {
-  const file = screenshots.resolve(ROOT, id);
+  const file = screenshots.resolve(ROOT, id, shotFolders());
   if (!file) throw new Error('That screenshot is gone.');
   const img = nativeImage.createFromPath(file);
   if (img.isEmpty()) throw new Error('Couldn\'t read that screenshot.');
@@ -554,20 +652,20 @@ handle('shots:full', (id) => {
   return (width > 2560 ? img.resize({ width: 2560, quality: 'good' }) : img).toDataURL();
 });
 handle('shots:copy', (id) => {
-  const file = screenshots.resolve(ROOT, id);
+  const file = screenshots.resolve(ROOT, id, shotFolders());
   if (!file) throw new Error('That screenshot is gone.');
   clipboard.writeImage(nativeImage.createFromPath(file));
 });
 handle('shots:reveal', (id) => {
-  const file = screenshots.resolve(ROOT, id);
+  const file = screenshots.resolve(ROOT, id, shotFolders());
   if (!file) throw new Error('That screenshot is gone.');
   shell.showItemInFolder(file);
 });
 handle('shots:delete', async (id) => {
-  const file = screenshots.resolve(ROOT, id);
+  const file = screenshots.resolve(ROOT, id, shotFolders());
   if (!file) throw new Error('That screenshot is gone.');
   await shell.trashItem(file); // to the Recycle Bin, so it can be restored
-  return screenshots.list(ROOT);
+  return screenshots.list(ROOT, shotFolders());
 });
 
 // ---------------------------------------------------------------- launcher updates (GitHub releases)

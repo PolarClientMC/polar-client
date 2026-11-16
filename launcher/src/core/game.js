@@ -107,7 +107,8 @@ class GameManager {
     const dirs = {
       versions: path.join(root, 'versions'),
       libraries: path.join(root, 'libraries'),
-      game: await prepareGameDir(root, version.id),
+      // a profile with its own folder passes it in; otherwise the version's folder
+      game: settings.gameDir || await prepareGameDir(root, version.id),
     };
     const env = currentEnv();
 

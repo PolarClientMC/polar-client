@@ -1,7 +1,7 @@
 {
   "name": "polar-client-launcher",
   "productName": "Polar Client",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "Launcher for Polar Client — the Polar Client mod on Minecraft 26.3, 1.21.11, 1.21.10, 1.16.5 (Fabric) and 1.8.9 (Legacy Fabric), with a performance pack.",
   "author": "Polar Client",
   "license": "MIT",
@@ -9,7 +9,7 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/core.test.js test/mods.test.js test/accounts.test.js test/servers.test.js test/versions.test.js test/game.test.js test/main.test.js test/modrinth.test.js test/features.test.js test/content.test.js test/polar.test.js test/window.test.js",
+    "test": "node --test test/core.test.js test/mods.test.js test/accounts.test.js test/servers.test.js test/versions.test.js test/game.test.js test/main.test.js test/modrinth.test.js test/features.test.js test/content.test.js test/polar.test.js test/window.test.js test/profiles.test.js",
     "bundle-mod": "node scripts/bundle-mod.js",
     "dist": "npm run bundle-mod && electron-builder",
     "dist:win": "npm run bundle-mod && electron-builder --win",

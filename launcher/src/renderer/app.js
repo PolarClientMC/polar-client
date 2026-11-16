@@ -49,6 +49,7 @@ const state = {
   profile: null,
   skinSide: 'front',
   versions: { selected: '26.3', versions: [] }, // the version dropdown
+  profiles: { selected: null, profiles: [], colors: ['#3b82f6'], defaults: {}, versions: [] }, // what Play starts
   runningVersion: null,
 };
 
@@ -97,10 +98,20 @@ const store = {
   },
 };
 let saveTimer;
+let pendingSettings = {};
+/** Saves only what changed (the mods on the Mods page belong to the profile that was active when they changed). */
 function saveSettings(patch) {
   Object.assign(state.settings, patch);
+  Object.assign(pendingSettings, patch);
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => polar.settings.set(state.settings).catch((e) => toast(e.message, 'error')), 250);
+  saveTimer = setTimeout(flushSettings, 250);
+}
+function flushSettings() {
+  clearTimeout(saveTimer);
+  const patch = pendingSettings;
+  pendingSettings = {};
+  if (!Object.keys(patch).length) return Promise.resolve();
+  return polar.settings.set(patch).catch((e) => toast(e.message, 'error'));
 }
 const avatarUrl = (a) => (a && a.type !== 'offline' && a.uuid ? `https://mc-heads.net/avatar/${a.uuid}/64` : 'assets/mark-256.png');
 // heads come from mc-heads.net; fall back to the logo when offline
@@ -286,7 +297,9 @@ function setPlayState({ label, main, sub, percent, disabled, running, dot }) {
 function idleSub() {
   const q = state.settings && state.settings.quickJoin;
   const v = currentVersion();
-  return q ? `Minecraft ${v.id} · joins ${q} on start` : `Minecraft ${v.id} · ${v.loaderName}${v.polar ? ' · Polar' : ''}`;
+  const p = currentProfile();
+  const who = p && !p.builtIn ? `${p.name} · ` : '';
+  return q ? `${who}Minecraft ${v.id} · joins ${q} on start` : `${who}Minecraft ${v.id} · ${v.loaderName}${v.polar ? ' · Polar' : ''}`;
 }
 const runningSub = () => {
   const v = state.versions.versions.find((x) => x.id === state.runningVersion);
@@ -358,7 +371,7 @@ function currentVersion() {
 }
 async function loadVersions() {
   try {
-    state.versions = await polar.versions.list();
+    [state.versions, state.profiles] = await Promise.all([polar.versions.list(), polar.profiles.list()]);
   } catch (e) {
     toast(e.message, 'error');
   }
@@ -369,20 +382,49 @@ function versionIcon(v) {
 }
 function renderVersionMenu() {
   const menu = $('versionMenu');
-  menu.replaceChildren(h('div', { class: 'dropdown-label', text: 'MINECRAFT VERSION' }));
+  const selected = state.profiles.selected || `v-${state.versions.selected}`;
+  const mine = state.profiles.profiles.filter((p) => !p.builtIn);
+  menu.replaceChildren();
+  if (mine.length) {
+    menu.append(h('div', { class: 'dropdown-label', text: 'YOUR PROFILES' }));
+    for (const p of mine) {
+      const current = p.id === selected;
+      const edit = h('button', { class: 'row-edit', type: 'button', title: `Edit ${p.name}`, 'aria-label': `Edit ${p.name}` }, icon('i-edit'));
+      edit.addEventListener('click', (e) => { e.stopPropagation(); closeMenus(); openProfileEditor(p.id); });
+      const row = h('div', { class: `menu-row version-row profile-row${current ? ' current' : ''}`, role: 'option', tabindex: '0', 'aria-selected': current ? 'true' : 'false' },
+        profileTile(p),
+        h('span', { class: 'grow' }, h('b', { text: p.name }), h('small', { text: profileLine(p) })),
+        current ? icon('i-check', 'check') : null, edit);
+      row.addEventListener('click', () => selectProfile(p.id));
+      row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectProfile(p.id); } });
+      menu.append(row);
+    }
+    menu.append(h('div', { class: 'menu-sep' }));
+  }
+  menu.append(h('div', { class: 'dropdown-label', text: 'MINECRAFT VERSIONS' }));
   for (const v of state.versions.versions) {
-    const current = v.id === state.versions.selected;
-    menu.append(h('button', { class: `menu-row version-row${current ? ' current' : ''}`, role: 'option', 'aria-selected': current ? 'true' : 'false', onclick: () => selectVersion(v.id) },
+    const current = `v-${v.id}` === selected;
+    menu.append(h('button', { class: `menu-row version-row${current ? ' current' : ''}`, role: 'option', 'aria-selected': current ? 'true' : 'false', onclick: () => selectProfile(`v-${v.id}`) },
       versionIcon(v),
       h('span', { class: 'grow' }, h('b', {}, `Minecraft ${v.id}`, v.polar ? h('span', { class: 'ver-tag', text: 'POLAR' }) : null), h('small', { text: v.summary })),
       current ? icon('i-check', 'check') : v.installed ? h('span', { class: 'ver-state ready', text: 'Installed' }) : null));
   }
   menu.append(h('div', { class: 'menu-sep' }),
-    h('div', { class: 'menu-foot', text: 'Polar Client runs on every version. Each one has its own game folder and downloads on first Play.' }));
+    h('button', { class: 'menu-row version-row new-profile', onclick: () => { closeMenus(); openProfileEditor(null); } },
+      h('span', { class: 'ver-ico' }, icon('i-plus')),
+      h('span', { class: 'grow' }, h('b', { text: 'New profile' }), h('small', { text: 'Pick a version, its own folder, mods and memory' }))));
 }
 function renderVersion() {
   const v = currentVersion();
-  $('versionLabel').textContent = v.id;
+  const p = currentProfile();
+  const custom = p && !p.builtIn;
+  $('versionKicker').textContent = custom ? `PROFILE · ${v.id}` : 'VERSION';
+  $('versionLabel').textContent = custom ? p.name : v.id;
+  $('versionTile').hidden = !custom;
+  if (custom) {
+    $('versionTile').textContent = initials(p.name);
+    $('versionTile').style.setProperty('--pc', p.color);
+  }
   $('versionChip').textContent = `Minecraft ${v.id}`;
   $('loaderChip').textContent = v.loaderName || LOADER_NAMES[v.loader] || 'Fabric';
   const builtIn = Object.values(BUILT_IN).reduce((n, l) => n + l.length, 0);
@@ -403,11 +445,13 @@ function renderModsNotice() {
     $(list).classList.toggle('dim', legacy);
     $(list).querySelectorAll('input[data-mod]').forEach((cb) => { cb.disabled = legacy; });
   }
-  if (v.polar) $('modsSub').replaceChildren("Polar Client's own features are always installed. Press ", h('kbd', { text: 'Right Shift' }), ' in game to turn them on or off.');
-  else $('modsSub').textContent = `Mods for Minecraft ${v.id}. The Game folder button opens this version's own folder.`;
+  const p = currentProfile();
+  const whose = p && !p.builtIn ? `The mods of your ${p.name} profile. ` : '';
+  if (v.polar) $('modsSub').replaceChildren(`${whose}Polar Client's own features are always installed. Press `, h('kbd', { text: 'Right Shift' }), ' in game to turn them on or off.');
+  else $('modsSub').textContent = `${whose || `Mods for Minecraft ${v.id}. `}The Game folder button opens its own folder.`;
   $('modsNoticeText').textContent = legacy
-    ? `Minecraft ${v.id} runs on Legacy Fabric with Legacy Fabric API. Polar Client's mods are all here; the performance pack and the other Modrinth mods are made for newer versions, so they aren't installed on ${v.id}. You can add Legacy Fabric mods to this version's mods folder.`
-    : `Polar Client isn't built for Minecraft ${v.id}. The launcher installs Fabric API and the performance mods below that have a ${v.id} build, and you can add your own Fabric mods to this version's mods folder.`;
+    ? `Minecraft ${v.id} runs on Legacy Fabric with Legacy Fabric API. Polar Client's mods are all here; the performance pack and the other Modrinth mods are made for newer versions, so they aren't installed on ${v.id}. You can add Legacy Fabric mods to its mods folder (the Game folder button).`
+    : `Polar Client isn't built for Minecraft ${v.id}. The launcher installs Fabric API and the performance mods below that have a ${v.id} build, and you can add your own Fabric mods to its mods folder (the Game folder button).`;
 }
 function placeVersionMenu() {
   const menu = $('versionMenu');
@@ -422,26 +466,204 @@ $('versionBtn').addEventListener('click', () => {
   if (toggleMenu('versionMenu', 'versionBtn')) placeVersionMenu();
 });
 window.addEventListener('resize', () => { if (!$('versionMenu').hidden) placeVersionMenu(); });
-async function selectVersion(id) {
+function selectVersion(id) {
+  return selectProfile(`v-${id}`);
+}
+
+// ---------------------------------------------------------------- profiles
+function currentProfile() {
+  const list = state.profiles.profiles || [];
+  return list.find((p) => p.id === state.profiles.selected) || null;
+}
+function initials(name) {
+  const words = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return 'P';
+  const two = words.length > 1 ? words[0][0] + words[1][0] : [...words[0]].slice(0, 2).join('');
+  return two.toUpperCase();
+}
+function profileTile(p, cls = '') {
+  const t = h('span', { class: `prof-tile ${cls}`.trim(), text: initials(p.name), 'aria-hidden': 'true' });
+  t.style.setProperty('--pc', p.color || '#3b82f6');
+  return t;
+}
+function profileLine(p) {
+  const v = state.versions.versions.find((x) => x.id === p.version);
+  const bits = [`Minecraft ${p.version}`, p.folder === 'own' ? 'Own folder' : `${p.version} folder`];
+  if (p.memoryGb) bits.push(`${p.memoryGb} GB`);
+  if (v && !v.installed) bits.push('Downloads on Play');
+  return bits.join(' · ');
+}
+/** After the profile changed: its mods, servers, Browse page and the Play area. */
+async function profileSwitched() {
+  try {
+    state.settings = await polar.settings.get();
+  } catch {
+    // keep the old copy; the next save still goes to the right profile
+  }
+  renderVersion();
+  renderMods();
+  loadPacks();
+  if ($('page-browse').classList.contains('active')) openBrowse();
+  else checkModUpdates();
+}
+async function selectProfile(id) {
   closeMenus();
-  if (id === state.versions.selected) return;
+  if (id === state.profiles.selected) return;
   if (state.launching) {
-    toast('Wait until the game has started, then pick another version.');
+    toast('Wait until the game has started, then pick another profile.');
     return;
   }
   try {
-    state.versions = await polar.versions.select(id);
-    state.settings.gameVersion = id;
-    renderVersion();
-    if ($('page-browse').classList.contains('active')) openBrowse();
-    else checkModUpdates();
+    await flushSettings(); // mod switches still waiting to be saved belong to the profile you're leaving
+    const res = await polar.profiles.select(id);
+    state.profiles = res.profiles;
+    state.versions = res.versions;
+    await profileSwitched();
+    const p = currentProfile();
     const v = currentVersion();
-    toast(v.polar ? `Minecraft ${v.id} with Polar Client.` : `Minecraft ${v.id} with ${v.loaderName}.`);
-    if (state.running) toast('The new version is used the next time you press Play.');
+    if (p && !p.builtIn) toast(`${p.name}: Minecraft ${v.id}${v.polar ? ' with Polar Client' : ''}.`);
+    else toast(v.polar ? `Minecraft ${v.id} with Polar Client.` : `Minecraft ${v.id} with ${v.loaderName}.`);
+    if (state.running) toast('The new profile is used the next time you press Play.');
   } catch (e) {
     toast(e.message, 'error', 7000);
   }
 }
+
+const editor = { id: null, color: null, version: null, folder: 'own', confirming: false };
+function renderEditor() {
+  const name = $('profileName').value.trim();
+  const tile = $('profilePreview');
+  tile.textContent = initials(name || 'Profile');
+  tile.style.setProperty('--pc', editor.color);
+  $('profileColors').replaceChildren(...state.profiles.colors.map((c) => {
+    const b = h('button', { type: 'button', role: 'radio', 'aria-checked': c === editor.color ? 'true' : 'false', 'aria-label': `Colour ${c}`, class: c === editor.color ? 'on' : '' });
+    b.style.setProperty('--sw', c);
+    b.addEventListener('click', () => { editor.color = c; renderEditor(); });
+    return b;
+  }));
+  // a folder with worlds only moves to newer versions (a newer version's world can break in an older one)
+  const was = editor.id ? state.profiles.profiles.find((x) => x.id === editor.id) : null;
+  const floor = was && was.worlds && was.folder === 'own' && editor.folder === 'own' ? state.versions.versions.findIndex((v) => v.id === was.version) : -1;
+  $('profileVersions').replaceChildren(...state.versions.versions.map((v, i) => {
+    const locked = floor >= 0 && i > floor;
+    const b = h('button', { type: 'button', role: 'radio', 'aria-checked': v.id === editor.version ? 'true' : 'false', class: v.id === editor.version ? 'on' : '',
+      disabled: locked, title: locked ? `${was.name}'s worlds are from ${was.version}; they can break in older versions` : null },
+      h('b', { text: v.id }), h('small', { text: v.loader === 'legacy-fabric' ? 'LEGACY' : 'FABRIC' }));
+    b.addEventListener('click', () => { editor.version = v.id; renderEditor(); });
+    return b;
+  }));
+  $('profileShareLabel').textContent = `Share Minecraft ${editor.version}'s folder`;
+  $('profileFolder').querySelectorAll('button').forEach((b) => {
+    const on = b.dataset.folder === editor.folder;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', on ? 'true' : 'false');
+  });
+  const memOn = $('profileMemOn').checked;
+  $('profileMem').disabled = !memOn;
+  const gb = Number($('profileMem').value);
+  $('profileMem').style.setProperty('--fill', `${((gb - 1) / 15) * 100}%`);
+  $('profileMemValue').textContent = memOn ? `${gb} GB` : `${state.profiles.defaults.memoryGb || 4} GB`;
+  $('profileMemValue').classList.toggle('off', !memOn);
+  const p = editor.id ? state.profiles.profiles.find((x) => x.id === editor.id) : null;
+  let hint = '';
+  if (p && p.folder === 'own' && editor.folder === 'own' && editor.version !== p.version) {
+    hint = `Mods you added from Browse switch to their ${editor.version} builds when you save.`;
+  } else if (p && editor.folder !== p.folder) {
+    hint = editor.folder === 'own' ? 'The profile gets a new, empty folder. Its old one stays as it is.' : `The profile uses Minecraft ${editor.version}'s folder. Its own folder stays as it is.`;
+  } else if (!p) {
+    hint = editor.folder === 'own' ? 'Starts with the mods that are on now. Change them on the Mods page after.' : 'Starts with the mods that are on now, in the version\'s folder.';
+  }
+  $('profileHint').textContent = hint;
+  $('profileHint').hidden = !hint;
+}
+function openProfileEditor(id) {
+  const p = id ? state.profiles.profiles.find((x) => x.id === id) : null;
+  const used = new Set(state.profiles.profiles.filter((x) => !x.builtIn).map((x) => x.color));
+  editor.id = p ? p.id : null;
+  editor.color = p ? p.color : (state.profiles.colors.find((c) => !used.has(c)) || state.profiles.colors[0]);
+  editor.version = p ? p.version : currentVersion().id;
+  editor.folder = p ? p.folder : 'own';
+  $('profileTitle').textContent = p ? `Edit ${p.name}` : 'New profile';
+  $('profileSave').textContent = p ? 'Save' : 'Create profile';
+  $('profileName').value = p ? p.name : '';
+  $('profileMemOn').checked = Boolean(p && p.memoryGb);
+  $('profileMem').value = String((p && p.memoryGb) || state.profiles.defaults.memoryGb || 4);
+  $('profileJvm').value = (p && p.jvmArgs) || '';
+  for (const b of ['profileDuplicate', 'profileOpen', 'profileDelete']) $(b).hidden = !p;
+  $('profileConfirm').hidden = true;
+  $('profileSave').disabled = false;
+  renderEditor();
+  openModal('profileModal');
+}
+$('profileName').addEventListener('input', renderEditor);
+$('profileMemOn').addEventListener('change', renderEditor);
+$('profileMem').addEventListener('input', renderEditor);
+$('profileFolder').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { editor.folder = b.dataset.folder; renderEditor(); }));
+async function afterProfiles(res, message) {
+  state.profiles = res.profiles;
+  state.versions = res.versions;
+  await profileSwitched();
+  if (message) toast(message);
+}
+$('profileForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fields = {
+    id: editor.id || undefined,
+    name: $('profileName').value,
+    version: editor.version,
+    color: editor.color,
+    folder: editor.folder,
+    memoryGb: $('profileMemOn').checked ? Number($('profileMem').value) : null,
+    jvmArgs: $('profileJvm').value,
+  };
+  $('profileSave').disabled = true;
+  try {
+    if (!editor.id) await flushSettings();
+    const res = await polar.profiles.save(fields);
+    $('profileModal').hidden = true;
+    const bits = [];
+    if (res.moved.updated.length) bits.push(`${res.moved.updated.length} mod${res.moved.updated.length > 1 ? 's' : ''} switched to ${res.profile.version}`);
+    if (res.moved.removed.length) bits.push(`removed ${res.moved.removed.join(', ')} (no ${res.profile.version} build)`);
+    await afterProfiles(res, editor.id ? `Saved ${res.profile.name}${bits.length ? `: ${bits.join('; ')}` : ''}.` : `Made ${res.profile.name}. Press Play to start it.`);
+  } catch (err) {
+    toast(err.message, 'error', 7000);
+  } finally {
+    $('profileSave').disabled = false;
+  }
+});
+$('profileDuplicate').addEventListener('click', async () => {
+  try {
+    await flushSettings();
+    const res = await polar.profiles.duplicate(editor.id);
+    $('profileModal').hidden = true;
+    await afterProfiles(res, `Made ${res.profile.name}.`);
+    openProfileEditor(res.profile.id);
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+});
+$('profileOpen').addEventListener('click', () => polar.profiles.openFolder(editor.id).catch((err) => toast(err.message, 'error')));
+$('profileDelete').addEventListener('click', () => {
+  const p = state.profiles.profiles.find((x) => x.id === editor.id);
+  if (!p) return;
+  $('profileConfirmText').textContent = `Delete ${p.name}?`;
+  const own = p.folder === 'own' && p.folderMade;
+  $('profileWipeRow').hidden = !own;
+  $('profileWipe').checked = false;
+  $('profileWipeText').textContent = p.worlds ? 'Also delete its folder, with its worlds, screenshots and mods' : 'Also delete its folder (screenshots, mods and settings)';
+  $('profileConfirm').hidden = false;
+});
+$('profileConfirmNo').addEventListener('click', () => { $('profileConfirm').hidden = true; });
+$('profileConfirmYes').addEventListener('click', async () => {
+  const wipe = $('profileWipe').checked && !$('profileWipeRow').hidden;
+  try {
+    const res = await polar.profiles.remove(editor.id, wipe);
+    $('profileModal').hidden = true;
+    await afterProfiles(res, res.keptFolder ? `Deleted ${res.removed}. Its folder is still there, in profiles.` : `Deleted ${res.removed}.`);
+  } catch (err) {
+    toast(err.message, 'error', 7000);
+  }
+});
 
 // ---------------------------------------------------------------- quick join
 function renderQuickJoinButton() {
@@ -1410,7 +1632,7 @@ async function openShot(i) {
   if (!list.length) return;
   shots.open = (i + list.length) % list.length;
   const x = list[shots.open];
-  $('shotInfo').textContent = `${x.name} · Minecraft ${x.version} · ${(x.size / 1048576).toFixed(1)} MB`;
+  $('shotInfo').textContent = `${x.name} · ${x.profile ? `${x.profile} · ` : ''}Minecraft ${x.version} · ${(x.size / 1048576).toFixed(1)} MB`;
   openModal('shotModal');
   $('shotImg').removeAttribute('src');
   try {

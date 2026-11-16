@@ -130,8 +130,9 @@
                   <svg class="play-ico"><use href="#i-play"/></svg>
                   <span class="play-label" id="playLabel">PLAY MINECRAFT</span>
                 </button>
-                <button class="version-btn" id="versionBtn" aria-haspopup="listbox" title="Choose the Minecraft version">
-                  <span class="version-text"><small>VERSION</small><b id="versionLabel">26.3</b></span>
+                <button class="version-btn" id="versionBtn" aria-haspopup="listbox" title="Choose a profile or a Minecraft version">
+                  <span class="prof-tile small" id="versionTile" hidden></span>
+                  <span class="version-text"><small id="versionKicker">VERSION</small><b id="versionLabel">26.3</b></span>
                   <svg class="chev"><use href="#i-down"/></svg>
                 </button>
                 <button class="ghost-btn" id="quickJoinBtn"><svg><use href="#i-link"/></svg><span id="quickJoinLabel">Quick Join</span></button>
@@ -329,7 +330,7 @@
             <div class="setting-card">
               <div class="setting-title">Memory <span class="setting-value" id="memValue">4 GB</span></div>
               <input type="range" id="memSlider" min="2" max="16" step="1" />
-              <div class="hint">4–6 GB is plenty for Polar Client with the performance pack.</div>
+              <div class="hint">4–6 GB is plenty for Polar Client with the performance pack. A profile can have its own.</div>
             </div>
             <div class="setting-card">
               <div class="setting-title">Window</div>
@@ -479,6 +480,45 @@
       <ul class="feature-points" id="featurePoints"></ul>
       <div class="row-actions end"><button class="btn ghost" data-goto="mods" data-close>See all mods</button><button class="btn primary" data-close>Got it</button></div>
     </div>
+  </div>
+
+  <!-- PROFILE MODAL: make or change a profile -->
+  <div class="modal-backdrop" id="profileModal" hidden>
+    <form class="modal profile-modal" id="profileForm" autocomplete="off">
+      <div class="modal-head"><h2 id="profileTitle">New profile</h2><button class="icon-btn" type="button" data-close aria-label="Close">×</button></div>
+      <div class="profile-top">
+        <span class="prof-tile big" id="profilePreview">P</span>
+        <label class="field grow"><span>Name</span><input type="text" id="profileName" maxlength="24" placeholder="e.g. PvP, Survival, Shaders" spellcheck="false" /></label>
+      </div>
+      <div class="swatches" id="profileColors" role="radiogroup" aria-label="Colour"></div>
+      <div class="field"><span>Minecraft version</span><div class="ver-pick" id="profileVersions" role="radiogroup" aria-label="Minecraft version"></div></div>
+      <div class="field"><span>Game folder</span>
+        <div class="folder-pick" id="profileFolder" role="radiogroup" aria-label="Game folder">
+          <button type="button" role="radio" data-folder="own"><svg><use href="#i-folder"/></svg><span><b>Its own folder</b><small>Its own worlds, mods, resource packs and settings. Your options and servers are copied in.</small></span></button>
+          <button type="button" role="radio" data-folder="version"><svg><use href="#i-layers"/></svg><span><b id="profileShareLabel">Share Minecraft 26.3's folder</b><small>The same worlds and packs as the Minecraft version in the list.</small></span></button>
+        </div>
+      </div>
+      <div class="profile-mem">
+        <label class="toggle"><input type="checkbox" id="profileMemOn" /><span></span>Own memory</label>
+        <input type="range" id="profileMem" min="1" max="16" step="1" />
+        <span class="setting-value" id="profileMemValue">4 GB</span>
+      </div>
+      <label class="field"><span>Java arguments</span><input type="text" id="profileJvm" placeholder="Same as Settings" spellcheck="false" /></label>
+      <p class="hint" id="profileHint"></p>
+      <div class="profile-confirm" id="profileConfirm" hidden>
+        <b id="profileConfirmText">Delete this profile?</b>
+        <label class="toggle" id="profileWipeRow"><input type="checkbox" id="profileWipe" /><span></span><small id="profileWipeText">Also delete its folder (worlds, screenshots and mods)</small></label>
+        <div class="row-actions end"><button class="btn ghost small" type="button" id="profileConfirmNo">Keep it</button><button class="btn danger small" type="button" id="profileConfirmYes"><svg><use href="#i-trash"/></svg>Delete profile</button></div>
+      </div>
+      <div class="row-actions profile-actions">
+        <button class="btn ghost small" type="button" id="profileDuplicate"><svg><use href="#i-copy"/></svg>Duplicate</button>
+        <button class="btn ghost small" type="button" id="profileOpen"><svg><use href="#i-folder"/></svg>Folder</button>
+        <button class="btn danger small" type="button" id="profileDelete"><svg><use href="#i-trash"/></svg>Delete</button>
+        <span class="grow"></span>
+        <button class="btn ghost" type="button" data-close>Cancel</button>
+        <button class="btn primary" type="submit" id="profileSave">Create profile</button>
+      </div>
+    </form>
   </div>
 
   <!-- version dropdown (fixed, so the hero doesn't clip it) -->

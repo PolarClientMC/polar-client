@@ -1,6 +1,15 @@
 {
   "items": [
     {
+      "id": "release-1.0.13",
+      "date": "2026-11-16",
+      "tag": "Update",
+      "title": "Polar Client 1.0.13",
+      "body": "New: Profiles. Make as many as you like, each with its own name, colour and Minecraft version. A profile can have its own game folder with its own worlds, mods and resource packs, or share a version's folder. Profiles can also have their own memory and Java arguments, and the Mods page changes the mods of the profile you picked. Pick a profile from the button next to Play, or press New profile at the bottom of that list. Your existing versions, worlds and mods stay exactly where they were.",
+      "link": "https://github.com/PolarClientMC/polar-client/releases/tag/v1.0.13",
+      "linkLabel": "Release notes"
+    },
+    {
       "id": "release-1.0.12",
       "date": "2026-11-16",
       "tag": "Update",

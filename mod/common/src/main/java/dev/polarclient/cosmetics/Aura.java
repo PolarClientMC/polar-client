@@ -21,7 +21,7 @@ final class Aura {
 		float[] life = {1.5f, 2.5f}, size = {0.08f, 0.14f}, radius = {0.3f, 0.7f}, height = {0, 1.9f};
 		float[] vx = {0, 0}, vy = {0, 0}, vz = {0, 0}, spin = {0, 0}, swirl = {0, 0};
 		float gravity;
-		boolean shrink, glow;
+		boolean shrink, glow, upright;
 		int[] colors = {0xFFFFFFFF};
 		int frames = 1;
 
@@ -39,6 +39,7 @@ final class Aura {
 			gravity = f(o, "gravity", 0);
 			shrink = o.has("shrink") && o.get("shrink").getAsBoolean();
 			glow = o.has("glow") && o.get("glow").getAsBoolean();
+			upright = o.has("upright") && o.get("upright").getAsBoolean(); // flames: never turned
 			frames = Math.max(1, (int) f(o, "frames", 1));
 			if (o.has("colors") && o.get("colors").isJsonArray()) {
 				JsonArray a = o.getAsJsonArray("colors");
@@ -104,7 +105,7 @@ final class Aura {
 			p.life = rand(s.life);
 			p.size = rand(s.size);
 			p.spin = rand(s.spin) * (float) (Math.PI / 180);
-			p.rot = random.nextFloat() * 6.28f;
+			p.rot = s.upright ? 0 : random.nextFloat() * 6.28f;
 			p.swirl = rand(s.swirl);
 			p.color = s.colors[random.nextInt(s.colors.length)];
 			p.frame = random.nextInt(s.frames);

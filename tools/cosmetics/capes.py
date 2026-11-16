@@ -869,7 +869,9 @@ def creator(W, H, f, N):
 
 def build(out, item):
     frames = item.get('frames', 1)
-    tex = cape_texture(lambda W, H, f: item['paint'](W, H, f, frames), frames=frames, edge=item.get('edge'))
+    ely = item.get('elytra')
+    tex = cape_texture(lambda W, H, f: item['paint'](W, H, f, frames), frames=frames, edge=item.get('edge'),
+                       elytra=(lambda W, H, f: ely(W, H, f, frames)) if ely else None)
     save_png(tex, f"{out}/textures/{item['id']}.png")
     return {'texture': f"textures/{item['id']}.png", 'frames': frames, 'frameTime': item.get('frameTime', 100)}
 

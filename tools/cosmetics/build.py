@@ -19,6 +19,9 @@ import backs  # noqa: E402
 import capes  # noqa: E402
 import heads  # noqa: E402
 import wings  # noqa: E402
+import revon  # noqa: E402
+
+revon.register()  # Revon's set (code-only): a cape with its elytra, a crown, wings and a trail
 
 KINDS = [('cape', capes), ('wings', wings), ('head', heads), ('back', backs), ('aura', auras)]
 COLLECTIONS = [
@@ -32,6 +35,7 @@ COLLECTIONS = [
     {'id': 'cute', 'name': 'Cute'},
     {'id': 'classic', 'name': 'Classic'},
     {'id': 'special', 'name': 'Special'},
+    revon.COLLECTION,
 ]
 RARITY = ['common', 'rare', 'epic', 'legendary', 'mythic']
 FIELDS = ('id', 'name', 'description', 'collection', 'rarity')

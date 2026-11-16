@@ -40,6 +40,10 @@
   {
    "id": "special",
    "name": "Special"
+  },
+  {
+   "id": "revon",
+   "name": "Revon"
   }
  ],
  "items": [
@@ -376,6 +380,18 @@
    "texture": "textures/cape_creator.png",
    "frames": 20,
    "frameTime": 100
+  },
+  {
+   "id": "cape_revon",
+   "name": "Revon's Cape",
+   "description": "Black and violet with the Revon star and purple fire. Wear an elytra and it changes to match.",
+   "collection": "revon",
+   "rarity": "mythic",
+   "type": "cape",
+   "special": true,
+   "texture": "textures/cape_revon.png",
+   "frames": 20,
+   "frameTime": 60
   },
   {
    "id": "wings_angel",
@@ -1151,6 +1167,58 @@
    }
   },
   {
+   "id": "wings_revon",
+   "name": "Revon's Wings",
+   "description": "Jagged black-violet wings with the Revon star at the shoulder, purple fire and drifting pixels.",
+   "collection": "revon",
+   "rarity": "mythic",
+   "type": "wings",
+   "special": true,
+   "model": "models/wings_revon.json",
+   "particles": {
+    "rate": 7,
+    "life": [
+     1.4,
+     2.4
+    ],
+    "size": [
+     0.05,
+     0.09
+    ],
+    "radius": [
+     0.3,
+     0.8
+    ],
+    "height": [
+     0.9,
+     1.7
+    ],
+    "vx": [
+     -0.06,
+     0.06
+    ],
+    "vy": [
+     0.12,
+     0.3
+    ],
+    "vz": [
+     -0.06,
+     0.06
+    ],
+    "shrink": true,
+    "colors": [
+     "#a752ff",
+     "#8a2cff",
+     "#dfa9ff",
+     "#c47dff"
+    ],
+    "glow": true,
+    "upright": true,
+    "texture": "textures/wings_revon_particles.png",
+    "frames": 5
+   }
+  },
+  {
    "id": "head_halo",
    "name": "Golden Halo",
    "description": "A glowing golden halo that slowly turns.",
@@ -1328,6 +1396,16 @@
    "rarity": "epic",
    "type": "head",
    "model": "models/head_snowflake_orbit.json"
+  },
+  {
+   "id": "head_revon_crown",
+   "name": "Revon's Crown",
+   "description": "An obsidian crown with the Revon star, burning violet and circled by drifting pixels.",
+   "collection": "revon",
+   "rarity": "mythic",
+   "type": "head",
+   "special": true,
+   "model": "models/head_revon_crown.json"
   },
   {
    "id": "back_frost_sword",
@@ -2052,7 +2130,59 @@
     "texture": "textures/aura_fireflies.png",
     "frames": 1
    }
+  },
+  {
+   "id": "aura_revon_trail",
+   "name": "Revon's Trail",
+   "description": "Purple fire, pixels and Revon stars burning at your feet and left behind wherever you walk.",
+   "collection": "revon",
+   "rarity": "mythic",
+   "type": "aura",
+   "special": true,
+   "particles": {
+    "rate": 34,
+    "life": [
+     0.8,
+     1.5
+    ],
+    "size": [
+     0.07,
+     0.13
+    ],
+    "radius": [
+     0.22,
+     0.5
+    ],
+    "height": [
+     0.0,
+     0.12
+    ],
+    "vx": [
+     -0.04,
+     0.04
+    ],
+    "vy": [
+     0.3,
+     0.6
+    ],
+    "vz": [
+     -0.04,
+     0.04
+    ],
+    "shrink": true,
+    "colors": [
+     "#8a2cff",
+     "#a752ff",
+     "#c47dff",
+     "#dfa9ff",
+     "#6a1fc4"
+    ],
+    "glow": true,
+    "upright": true,
+    "texture": "textures/aura_revon_trail.png",
+    "frames": 7
+   }
   }
  ],
  "badge": "badge.png"
-}
+}

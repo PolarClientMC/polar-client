@@ -4,7 +4,8 @@ sprites from here (a strip of frames; one is picked at random per particle and t
 Particle settings (ranges are [min, max]): rate (per second), life (s), size (blocks), radius (spawn distance from
 the player's centre), height (spawn height above the feet), vx/vy/vz (blocks per second), spin (degrees per second),
 swirl (radians per second around the player), gravity (blocks/s^2, positive pulls down), shrink (true: shrink as
-they age), glow (true: additive and full-bright), colors (picked at random).
+they age), glow (true: additive and full-bright), upright (true: sprites keep pointing up instead of starting at a
+random angle, for flames), colors (picked at random).
 """
 import math
 

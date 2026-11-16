@@ -327,9 +327,11 @@ def _blit_padded(dst, x, y, img):
 CAPE_SCALE = 4  # HD capes: 4 texels per pixel (256 x 128, a 4x vanilla cape)
 
 
-def cape_texture(front, back=None, edge=None, frames=1):
+def cape_texture(front, back=None, edge=None, frames=1, elytra=None):
     """Builds an HD cape strip. front(W, H, frame) paints the outside (what people see from behind, 10x16 px);
-    back(W, H, frame) the lining (defaults to a darker front); edge: '#rrggbb' for the sides."""
+    back(W, H, frame) the lining (defaults to a darker front); edge: '#rrggbb' for the sides.
+    elytra(W, H, frame) paints the elytra wing (10x20 px, may be transparent outside its shape); by default the
+    elytra reuses the cape's outside."""
     S = CAPE_SCALE
     W, H = 64 * S, 32 * S
     strip = np.zeros((H * frames, W, 4), np.float32)
@@ -347,10 +349,22 @@ def cape_texture(front, back=None, edge=None, frames=1):
         strip[oy + 1 * S:oy + 17 * S, 11 * S:12 * S] = side_v
         strip[oy:oy + 1 * S, 1 * S:11 * S] = side_h
         strip[oy:oy + 1 * S, 11 * S:21 * S] = side_h
-        # elytra (vanilla uses the cape texture for it): reuse the outside, squeezed into its region
-        ely = np.asarray(Image.fromarray(to_u8(out)).resize((10 * S, 20 * S), Image.BILINEAR), np.float32) / 255
-        strip[oy + 2 * S:oy + 22 * S, 22 * S:32 * S] = ely
-        strip[oy + 2 * S:oy + 22 * S, 34 * S:44 * S] = ely[:, ::-1]
+        # elytra (Minecraft uses the cape texture for it). The wing is a 10 x 20 x 2 box at (22, 0) of the cape
+        # texture: the face seen from outside is the back one (36..46), the inside face (24..34) is left clear like
+        # the game's own elytra, and the thin sides take the wing's edge colour.
+        if elytra:
+            ely = np.asarray(elytra(10 * S, 20 * S, f), np.float32)
+        else:
+            ely = np.asarray(Image.fromarray(to_u8(out)).resize((10 * S, 20 * S), Image.BILINEAR), np.float32) / 255
+        strip[oy + 2 * S:oy + 22 * S, 36 * S:46 * S] = ely
+        rim = rgba(np.broadcast_to(side_col, (20 * S, 2 * S, 3)).copy())
+        rim[..., 3] = np.repeat(ely[:, :1, 3], 2 * S, 1) if elytra else 1
+        strip[oy + 2 * S:oy + 22 * S, 34 * S:36 * S] = rim
+        strip[oy + 2 * S:oy + 22 * S, 22 * S:24 * S] = rim
+        cap = rgba(np.broadcast_to(side_col, (2 * S, 10 * S, 3)).copy())
+        cap[..., 3] = np.repeat(ely[:1, :, 3], 2 * S, 0) if elytra else 1
+        strip[oy:oy + 2 * S, 24 * S:34 * S] = cap
+        strip[oy:oy + 2 * S, 34 * S:44 * S] = cap
     return strip
 
 

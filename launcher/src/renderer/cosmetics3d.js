@@ -334,7 +334,7 @@
         state.particles.push({
           x: Math.cos(ang) * rad, y: h, z: Math.sin(ang) * rad,
           vx: rand(P.vx), vy: rand(P.vy), vz: rand(P.vz), age: 0, life: rand(P.life || [1.5, 2.5]),
-          size: rand(P.size || [0.08, 0.14]), spin: rand(P.spin || 0) * RAD, rot: Math.random() * 6.28,
+          size: rand(P.size || [0.08, 0.14]), spin: rand(P.spin || 0) * RAD, rot: P.upright ? 0 : Math.random() * 6.28,
           col: hexColor((P.colors || ['#ffffff'])[Math.floor(Math.random() * (P.colors || ['#ffffff']).length)]),
           frame: Math.floor(Math.random() * (P.frames || 1)), swirl: rand(P.swirl || 0), ang, rad,
         });

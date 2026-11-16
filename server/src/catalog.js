@@ -157,6 +157,12 @@ export default {
    "special": true
   },
   {
+   "id": "cape_revon",
+   "name": "Revon's Cape",
+   "type": "cape",
+   "special": true
+  },
+  {
    "id": "wings_angel",
    "name": "Angel Wings",
    "type": "wings"
@@ -465,6 +471,12 @@ export default {
    "type": "wings"
   },
   {
+   "id": "wings_revon",
+   "name": "Revon's Wings",
+   "type": "wings",
+   "special": true
+  },
+  {
    "id": "head_halo",
    "name": "Golden Halo",
    "type": "head"
@@ -562,6 +574,12 @@ export default {
    "id": "head_snowflake_orbit",
    "name": "Snowflake Orbit",
    "type": "head"
+  },
+  {
+   "id": "head_revon_crown",
+   "name": "Revon's Crown",
+   "type": "head",
+   "special": true
   },
   {
    "id": "back_frost_sword",
@@ -668,6 +686,12 @@ export default {
    "id": "aura_fireflies",
    "name": "Fireflies",
    "type": "aura"
+  },
+  {
+   "id": "aura_revon_trail",
+   "name": "Revon's Trail",
+   "type": "aura",
+   "special": true
   }
  ]
 };

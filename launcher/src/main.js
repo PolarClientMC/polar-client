@@ -85,8 +85,29 @@ function updatePresence() {
   discord.set(activityFor({ version: selectedVersion().id, game: run ? { version: run.version, startedAt: run.startedAt, where: run.where } : null }));
 }
 
+/** The launcher window, or null once it's closed (a closed window's object throws "Object has been destroyed" if used). */
+function liveWin() {
+  return win && !win.isDestroyed() ? win : null;
+}
+
+/** Brings the launcher window back: restores and focuses it, or opens a new one if it was closed. */
+function showWindow() {
+  const w = liveWin();
+  if (!w) return createWindow();
+  if (w.isMinimized()) w.restore();
+  w.show();
+  w.focus();
+}
+
+/** A file picker, attached to the launcher window when it's open. */
+function openDialog(options) {
+  const w = liveWin();
+  return w ? dialog.showOpenDialog(w, options) : dialog.showOpenDialog(options);
+}
+
 function send(channel, data) {
-  if (win && !win.isDestroyed()) win.webContents.send(channel, data);
+  const w = liveWin();
+  if (w) w.webContents.send(channel, data);
 }
 
 const game = new GameManager({
@@ -109,15 +130,18 @@ const game = new GameManager({
       closeBridge();
       updatePresence();
     }
-    if (type === 'exit' && hiddenForGame && win) {
+    if (type === 'exit') {
+      // the window was hidden for the game: bring it back. If it was closed while the game ran, the launcher only
+      // stayed open for the game, so it can quit now.
+      if (hiddenForGame && liveWin()) liveWin().show();
       hiddenForGame = false;
-      win.show();
+      if (!liveWin() && BrowserWindow.getAllWindows().length === 0) app.quit();
     }
   },
 });
 
 function createWindow() {
-  win = new BrowserWindow({
+  const w = new BrowserWindow({
     width: 1320,
     height: 860,
     minWidth: 1080,
@@ -134,15 +158,22 @@ function createWindow() {
       sandbox: true,
     },
   });
-  win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  win.once('ready-to-show', () => win.show());
-  win.on('maximize', () => send('win:state', { maximized: true }));
-  win.on('unmaximize', () => send('win:state', { maximized: false }));
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  win = w;
+  w.on('closed', () => {
+    if (win === w) win = null;
+  });
+  w.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  w.once('ready-to-show', () => {
+    if (!w.isDestroyed()) w.show();
+  });
+  w.on('maximize', () => send('win:state', { maximized: true }));
+  w.on('unmaximize', () => send('win:state', { maximized: false }));
+  w.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https://')) shell.openExternal(url);
     return { action: 'deny' };
   });
-  win.webContents.on('will-navigate', (e) => e.preventDefault());
+  w.webContents.on('will-navigate', (e) => e.preventDefault());
+  return w;
 }
 
 /** After the game closes with an error: finds the new crash report and explains the likely cause to the window. */
@@ -174,8 +205,8 @@ function microsoftSignIn() {
     const loginWin = new BrowserWindow({
       width: 500,
       height: 660,
-      parent: win,
-      modal: true,
+      parent: liveWin() || undefined,
+      modal: Boolean(liveWin()),
       title: 'Sign in with Microsoft',
       autoHideMenuBar: true,
       backgroundColor: '#FFFFFF',
@@ -483,9 +514,9 @@ handle('game:launch', async (opts = {}) => {
     throw e;
   }
   updatePresence();
-  if (settings.closeOnLaunch && win) {
+  if (settings.closeOnLaunch && liveWin()) {
     hiddenForGame = true;
-    win.hide();
+    liveWin().hide();
   }
   return result;
 });
@@ -595,7 +626,7 @@ async function profileToken() {
 handle('profile:get', async () => profile.getProfile(await profileToken()));
 handle('skin:upload', async (variant) => {
   const token = await profileToken();
-  const r = await dialog.showOpenDialog(win, { title: 'Choose a skin (64×64 PNG)', properties: ['openFile'], filters: [{ name: 'Skin', extensions: ['png'] }] });
+  const r = await openDialog({ title: 'Choose a skin (64×64 PNG)', properties: ['openFile'], filters: [{ name: 'Skin', extensions: ['png'] }] });
   if (r.canceled || !r.filePaths[0]) return null;
   return profile.uploadSkin(token, r.filePaths[0], variant);
 });
@@ -611,7 +642,7 @@ handle('skins:saveCurrent', async () => {
   return skinLibrary.list();
 });
 handle('skins:addFiles', async (variant) => {
-  const r = await dialog.showOpenDialog(win, { title: 'Add skins (64×64 PNG)', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Skin', extensions: ['png'] }] });
+  const r = await openDialog({ title: 'Add skins (64×64 PNG)', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Skin', extensions: ['png'] }] });
   if (r.canceled) return { list: await skinLibrary.list(), added: 0, errors: [] };
   const errors = [];
   let added = 0;
@@ -694,7 +725,7 @@ handle('folder:open', async (which) => {
   if (err) throw new Error(err);
 });
 handle('java:pick', async () => {
-  const r = await dialog.showOpenDialog(win, {
+  const r = await openDialog({
     title: 'Choose a Java executable',
     properties: ['openFile'],
     filters: process.platform === 'win32' ? [{ name: 'Java', extensions: ['exe'] }] : [],
@@ -705,16 +736,16 @@ handle('link:open', async (url) => {
   if (typeof url === 'string' && url.startsWith('https://')) await shell.openExternal(url);
 });
 
-ipcMain.on('win:minimize', () => win && win.minimize());
-ipcMain.on('win:maximize', () => win && (win.isMaximized() ? win.unmaximize() : win.maximize()));
-ipcMain.on('win:close', () => win && win.close());
+ipcMain.on('win:minimize', () => liveWin() && liveWin().minimize());
+ipcMain.on('win:maximize', () => {
+  const w = liveWin();
+  if (w) w.isMaximized() ? w.unmaximize() : w.maximize();
+});
+ipcMain.on('win:close', () => liveWin() && liveWin().close());
 
+// opening Polar Client again while it runs (for example while the game is open) brings the window back
 app.on('second-instance', () => {
-  if (win) {
-    if (win.isMinimized()) win.restore();
-    win.show();
-    win.focus();
-  }
+  if (app.isReady()) showWindow();
 });
 app.whenReady().then(() => {
   protocol.handle('polar-cos', async (req) => {
@@ -741,3 +772,20 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
+
+// a main-process error shouldn't become an error box for the player: it goes to .polarclient/logs/launcher.log
+function logError(kind, e) {
+  const line = `[${new Date().toISOString()}] ${kind}: ${(e && e.stack) || e}\n`;
+  console.error(line);
+  try {
+    const dir = path.join(ROOT, 'logs');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 'launcher.log');
+    if (fs.existsSync(file) && fs.statSync(file).size > 512 * 1024) fs.renameSync(file, `${file}.old`);
+    fs.appendFileSync(file, line);
+  } catch {
+    // nowhere to write it: the console line will have to do
+  }
+}
+process.on('uncaughtException', (e) => logError('uncaught exception', e));
+process.on('unhandledRejection', (e) => logError('unhandled rejection', e));

@@ -6,6 +6,7 @@
         content="default-src 'self'; img-src 'self' data: polar-cos: https://mc-heads.net https://cdn.modrinth.com https://raw.githubusercontent.com; style-src 'self'; script-src 'self'; font-src 'self'; connect-src polar-cos:" />
   <title>Polar Client</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="redesign.css" />
 </head>
 <body>
   <!-- icon sprites (generic line icons) -->
@@ -49,6 +50,8 @@
     <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/></symbol>
     <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7V18a1.5 1.5 0 0 0 1.5 1.5h14a1.5 1.5 0 0 0 1.5-1.5V9a1.5 1.5 0 0 0-1.5-1.5h-7L10 5H5A1.5 1.5 0 0 0 3.5 6.5z"/></symbol>
     <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="2"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></symbol>
+    <symbol id="i-wifi-off" viewBox="0 0 24 24"><path d="M5 12.5a10 10 0 0 1 4-2.4M15 10.1a10 10 0 0 1 4 2.4M8.5 16a5 5 0 0 1 7 0M12 19.5h.01M3.5 3.5l17 17"/></symbol>
   </svg>
 
   <div class="titlebar">
@@ -62,22 +65,26 @@
   </div>
 
   <div class="app">
-    <nav class="sidebar">
-      <button class="nav-item active" data-page="home"><svg><use href="#i-home"/></svg><span>Home</span></button>
-      <button class="nav-item" data-page="servers"><svg><use href="#i-globe"/></svg><span>Servers</span></button>
-      <button class="nav-item" data-page="mods"><svg><use href="#i-layers"/></svg><span>Mods</span></button>
-      <button class="nav-item" data-page="browse"><svg><use href="#i-search"/></svg><span>Browse</span><span class="nav-badge" id="browseBadge" hidden></span></button>
-      <button class="nav-item" data-page="shots"><svg><use href="#i-image"/></svg><span>Screenshots</span></button>
-      <button class="nav-item" data-page="cosmetics"><svg><use href="#i-shirt"/></svg><span>Cosmetics</span></button>
-      <button class="nav-item" data-page="friends"><svg><use href="#i-users"/></svg><span>Friends</span><span class="nav-badge" id="friendsBadge" hidden></span></button>
-      <button class="nav-item" data-page="settings"><svg><use href="#i-sun"/></svg><span>Settings</span></button>
-      <button class="nav-item" data-page="console"><svg><use href="#i-terminal"/></svg><span>Console</span></button>
-      <div class="sidebar-spacer"></div>
+    <nav class="sidebar" aria-label="Main">
       <div class="sidebar-brand">
         <img src="assets/mark-256.png" alt="" />
-        <img class="brand-word" src="assets/logo-text.webp" alt="Polar Client" />
-        <span class="brand-version" id="brandVersion">v1.0.0</span>
+        <span class="brand-text"><b>Polar Client</b><span class="brand-version" id="brandVersion">v1.0.0</span></span>
       </div>
+      <p class="nav-group">Play</p>
+      <button class="nav-item active" data-page="home" title="Home"><svg><use href="#i-home"/></svg><span>Home</span></button>
+      <button class="nav-item" data-page="servers" title="Servers"><svg><use href="#i-globe"/></svg><span>Servers</span></button>
+      <button class="nav-item" data-page="partners" title="Partner servers"><svg><use href="#i-star"/></svg><span>Partners</span></button>
+      <p class="nav-group">Library</p>
+      <button class="nav-item" data-page="mods" title="Mods"><svg><use href="#i-layers"/></svg><span>Mods</span></button>
+      <button class="nav-item" data-page="browse" title="Browse"><svg><use href="#i-search"/></svg><span>Browse</span><span class="nav-badge" id="browseBadge" hidden></span></button>
+      <button class="nav-item" data-page="shots" title="Screenshots"><svg><use href="#i-image"/></svg><span>Screenshots</span></button>
+      <p class="nav-group">You</p>
+      <button class="nav-item" data-page="cosmetics" title="Cosmetics"><svg><use href="#i-shirt"/></svg><span>Cosmetics</span></button>
+      <button class="nav-item" data-page="friends" title="Friends"><svg><use href="#i-users"/></svg><span>Friends</span><span class="nav-badge" id="friendsBadge" hidden></span></button>
+      <div class="sidebar-spacer"></div>
+      <button class="nav-discord" data-discord title="Join our Discord"><svg><use href="#i-chat"/></svg><span>Join our Discord</span></button>
+      <button class="nav-item" data-page="settings" title="Settings"><svg><use href="#i-gear"/></svg><span>Settings</span></button>
+      <button class="nav-item" data-page="console" title="Console"><svg><use href="#i-terminal"/></svg><span>Console</span></button>
     </nav>
 
     <main class="content">
@@ -103,6 +110,11 @@
         <span id="updateText">A new version of Polar Client is ready.</span>
         <button class="btn small primary" id="updateBtn">Update now</button>
         <button class="icon-btn" id="updateLater" aria-label="Later">×</button>
+      </div>
+
+      <div class="offline-banner" id="offlineBanner" hidden>
+        <svg><use href="#i-wifi-off"/></svg>
+        <span><b>You're offline.</b> You can still play singleplayer with versions you already downloaded. Friends, Browse and cosmetics come back when you reconnect.</span>
       </div>
 
       <div class="pages">
@@ -172,6 +184,42 @@
             </div>
           </header>
           <div class="server-list" id="serverList"></div>
+        </section>
+
+        <!-- PARTNERS -->
+        <section class="page" id="page-partners">
+          <header class="page-head">
+            <div><h1>Partner servers</h1><p>Servers that team up with Polar Client. Partners show up here for every Polar player.</p></div>
+          </header>
+          <div class="partner-banner">
+            <span class="partner-mark"><svg><use href="#i-star"/></svg></span>
+            <div class="grow">
+              <small>OPEN FOR PARTNERS</small>
+              <h2>Still looking for collaborations</h2>
+              <p>We don't have any partner servers yet. Run a server and want your players on Polar? Come talk to us on Discord.</p>
+            </div>
+            <button class="btn primary" data-discord><svg><use href="#i-chat"/></svg>Join our Discord</button>
+          </div>
+          <div class="partner-grid">
+            <section class="panel partner-card">
+              <h2>What partners get</h2>
+              <ul class="partner-points">
+                <li><svg><use href="#i-star"/></svg><span><b>A spot on this page</b>Your server here, with one-click Join, for every Polar player.</span></li>
+                <li><svg><use href="#i-sparkle"/></svg><span><b>Your own cosmetic</b>A cape or badge for your server's players.</span></li>
+                <li><svg><use href="#i-bell"/></svg><span><b>News on Home</b>Events and seasons shown in What's new.</span></li>
+              </ul>
+            </section>
+            <section class="panel partner-card">
+              <h2>How to partner</h2>
+              <ol class="partner-steps">
+                <li>Join the Polar Client Discord.</li>
+                <li>Open a ticket and tell us about your server.</li>
+                <li>We'll set up your listing together.</li>
+              </ol>
+              <button class="btn ghost" data-discord><svg><use href="#i-external"/></svg>Open Discord</button>
+            </section>
+            <div class="partner-slot"><span class="plus"><svg><use href="#i-plus"/></svg></span><b>Your server could be here</b><span>Partner servers will appear in this list.</span></div>
+          </div>
         </section>
 
         <!-- MODS -->
@@ -527,5 +575,6 @@
   <div class="toasts" id="toasts"></div>
   <script src="cosmetics3d.js"></script>
   <script src="app.js"></script>
+  <script src="redesign.js"></script>
 </body>
 </html>

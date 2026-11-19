@@ -1,0 +1,15 @@
+{
+  "name": "polar-bot-presence",
+  "private": true,
+  "description": "Keeps Polar Bot shown as online in Discord (its commands run on Cloudflare).",
+  "main": "presence.js",
+  "scripts": {
+    "start": "node presence.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

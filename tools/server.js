@@ -4,6 +4,7 @@
 // deploy-server.bat:
 //   node tools/server.js                         sign in to Cloudflare (first time), deploy, set the secrets, check it
 //   node tools/server.js --new-admin-password    the same, with a fresh admin password
+//   node tools/server.js --discord               the same, then sets up Polar Bot for the Discord server (discord-bot.bat)
 // The first run opens Cloudflare in your browser to sign in. Everything after that is automatic.
 const { spawnSync, spawn } = require('node:child_process');
 const crypto = require('node:crypto');
@@ -25,6 +26,25 @@ function say(s = '') {
 function fail(msg) {
   console.error(`\n${msg}`);
   process.exit(1);
+}
+
+/** Like ask(), but what's typed (a token) isn't shown. */
+function askHidden(question) {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+    let shown = false;
+    rl._writeToOutput = (s) => {
+      if (!shown) {
+        shown = true;
+        rl.output.write(s);
+      }
+    };
+    rl.question(question, (a) => {
+      rl.close();
+      process.stdout.write('\n');
+      resolve((a || '').trim());
+    });
+  });
 }
 
 function ask(question) {
@@ -171,6 +191,102 @@ async function healthy(url) {
   return null;
 }
 
+// ---------------------------------------------------------------- Polar Bot (Discord)
+
+const DISCORD = 'https://discord.com/api/v10';
+const ICON = path.join(ROOT, 'branding', 'png', 'polar-icon-512.png');
+
+async function discordApi(token, method, p, body) {
+  for (let i = 0; i < 4; i++) {
+    const res = await fetch(DISCORD + p, { method, headers: { Authorization: `Bot ${token}`, 'Content-Type': 'application/json',
+      'User-Agent': 'DiscordBot (https://polar-client.polarclientminecraft.workers.dev, 1.0) PolarSetup' }, body: body ? JSON.stringify(body) : undefined });
+    if (res.status === 429) {
+      const j = await res.json().catch(() => ({}));
+      await new Promise((r) => setTimeout(r, (Number(j.retry_after) || 2) * 1000 + 200));
+      continue;
+    }
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : null;
+    if (!res.ok) {
+      const err = new Error((data && data.message) || `Discord said ${res.status}`);
+      err.status = res.status;
+      err.data = data;
+      throw err;
+    }
+    return data;
+  }
+  throw new Error('Discord kept rate-limiting; wait a minute and run this again.');
+}
+
+async function discordBot(url, password) {
+  say('\nPolar Bot (the Discord server\'s bot)');
+  say('  Use the bot you made at https://discord.com/developers/applications (the one already in your server).');
+  say('  Bot page > Reset Token > Copy, then paste it here. It is saved on Cloudflare only, not on this PC.\n');
+  const token = await askHidden('  Bot token (hidden while you paste): ');
+  if (!token) fail('No token, so Polar Bot was not set up.');
+  let app;
+  try {
+    app = await discordApi(token, 'GET', '/oauth2/applications/@me');
+  } catch (e) {
+    fail(e.status === 401 ? 'Discord says that token is wrong. Press Reset Token on the Bot page, copy the new one, and run this again.' : `Couldn't reach Discord: ${e.message}`);
+  }
+  const guilds = await discordApi(token, 'GET', '/users/@me/guilds');
+  if (!guilds.length) fail('The bot is in no server. Add it to your Polar Client server first (OAuth2 > URL Generator > bot + Administrator).');
+  let guild = guilds[0];
+  if (guilds.length > 1) {
+    guilds.forEach((g, i) => say(`  ${i + 1}. ${g.name}`));
+    const n = Number(await ask('  Which server is the Polar Client one? Number: '));
+    guild = guilds[n - 1];
+    if (!guild) fail('No such server.');
+  }
+  say(`  Bot: ${app.name} · server: ${guild.name}`);
+  say('  Saving the bot settings on Cloudflare…');
+  putSecret('DISCORD_BOT_TOKEN', token);
+  putSecret('DISCORD_PUBLIC_KEY', app.verify_key);
+  putSecret('DISCORD_APP_ID', app.id);
+  putSecret('DISCORD_GUILD_ID', guild.id);
+
+  // wait until the Worker has the key (a request without a signature is then refused with 401, not 503)
+  const endpoint = `${url}/discord/interactions`;
+  for (let i = 0; i < 30; i++) {
+    const r = await fetch(endpoint, { method: 'POST', body: '{}' }).catch(() => null);
+    if (r && r.status === 401) break;
+    await new Promise((res) => setTimeout(res, 3000));
+  }
+  say('  Pointing Discord at the bot…');
+  let lastErr = null;
+  for (let i = 0; i < 6; i++) {
+    try {
+      // Discord checks the address answers properly before it accepts it
+      await discordApi(token, 'PATCH', '/applications/@me', { interactions_endpoint_url: endpoint,
+        description: "Polar Client's own bot: moderation, tickets, giveaways and Polar commands. Type /help." });
+      lastErr = null;
+      break;
+    } catch (e) {
+      lastErr = e;
+      await new Promise((res) => setTimeout(res, 5000));
+    }
+  }
+  if (lastErr) fail(`Discord didn't accept the bot's address (${lastErr.message}). Wait a minute and run discord-bot.bat again.`);
+  try {
+    const me = await discordApi(token, 'GET', '/users/@me');
+    const patch = {};
+    if (me.username !== 'Polar Bot') patch.username = 'Polar Bot';
+    if (!me.avatar && fs.existsSync(ICON)) patch.avatar = `data:image/png;base64,${fs.readFileSync(ICON).toString('base64')}`;
+    if (Object.keys(patch).length) await discordApi(token, 'PATCH', '/users/@me', patch);
+  } catch {
+    // the name and picture are nice to have (Discord limits how often they change)
+  }
+  say('  Registering the commands and finding the channels…');
+  const res = await fetch(`${url}/discord/admin/setup`, { method: 'POST', headers: { Authorization: `Bearer ${password}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ guild: guild.id }) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) fail(`The bot couldn't finish its setup: ${data.error || res.status}`);
+  for (const d of data.done || []) say(`    ${d}`);
+  say('\nPolar Bot is ready. In your server, type /help to see its commands.');
+  say('Settings: /config show. Server owners and admins can change who sees which command in Server Settings > Integrations > Polar Bot.');
+}
+
 async function main() {
   checkNode();
   const newAdmin = process.argv.includes('--new-admin-password');
@@ -193,6 +309,7 @@ async function main() {
   } else {
     say('The launcher already points at this server.');
   }
+  if (process.argv.includes('--discord')) await discordBot(url, password);
 }
 
 main().catch((e) => fail(e && e.stack ? e.stack : String(e)));

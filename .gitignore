@@ -33,3 +33,5 @@ server/admin-password.txt
 
 # Python caches (tools/cosmetics)
 __pycache__/
+# the Discord bot token for discord-presence (never upload it)
+discord-presence/token.txt

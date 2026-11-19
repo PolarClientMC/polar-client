@@ -78,6 +78,11 @@ export function makeCtx() {
     sockets,
     storage: {
       sql,
+      // the Durable Object alarm: the tests look at it and fire it by hand
+      alarm: null,
+      async getAlarm() { return this.alarm; },
+      async setAlarm(t) { this.alarm = Number(t); },
+      async deleteAlarm() { this.alarm = null; },
       transactionSync(fn) {
         db.exec('BEGIN');
         try {

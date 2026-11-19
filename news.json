@@ -1,6 +1,15 @@
 {
   "items": [
     {
+      "id": "release-1.0.14",
+      "date": "2026-11-20",
+      "tag": "Update",
+      "title": "Polar Client 1.0.14",
+      "body": "A new look for the launcher. Cleaner pages with frosted glass cards, a sidebar grouped into Play, Library and You, and a Join our Discord button. New Partner servers page: we're looking for servers to team up with, so come talk to us on Discord. The Play button now shows what it's downloading and how far along it is, and while you play it shows how long you've been in game with a Stop button next to it. The crash helper has an Ask on Discord button. In a small window the sidebar folds down to icons.",
+      "link": "https://github.com/PolarClientMC/polar-client/releases/tag/v1.0.14",
+      "linkLabel": "Release notes"
+    },
+    {
       "id": "release-1.0.13",
       "date": "2026-11-16",
       "tag": "Update",

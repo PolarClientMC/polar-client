@@ -82,6 +82,8 @@ ROLES = [
     dict(key='creator', name='Content Creator', color=0xEC4899, hoist=True, permissions=0),
     dict(key='tester', name='Beta Tester', color=0xF97316, hoist=False, permissions=0),
     dict(key='supporter', name='Supporter', color=0xFACC15, hoist=False, permissions=0),
+    # everyone in the community: new members get it by answering the first Channels & Roles question
+    dict(key='member', name='Member', color=0x94A3B8, hoist=False, permissions=0),
     # picked by members in Channels & Roles; staff can ping them, members can't
     dict(key='ping_updates', name='Update Pings', color=0, hoist=False, permissions=0, pick=('Launcher updates', '🆕', 'A ping when a new Polar Client version is out')),
     dict(key='ping_events', name='Event Pings', color=0, hoist=False, permissions=0, pick=('Events', '🎉', 'A ping for community events and tournaments')),
@@ -594,15 +596,20 @@ class Setup:
                                       ('Screenshots and clips', 'See what others make', '📸', ['media']),
                                       ('HUDs and mods', 'Share and copy setups', '💻', ['huds']),
                                       ('Cosmetics', 'Capes, wings and giveaways', '🦋', ['cosmetics', 'giveaways'])]]
+        welcome = []
+        if 'member' in self.role:
+            welcome = [dict(id=snowflake(), type=0, title='Welcome to Polar Client!', single_select=True, required=True, in_onboarding=True,
+                            options=[dict(id=snowflake(), title='Join the community', description='Gives you the Member role',
+                                          emoji_name='✅', role_ids=[self.role['member']], channel_ids=[])])]
         try:
             self.api('PUT', f'/guilds/{self.gid}/onboarding', dict(
-                prompts=[dict(id=snowflake(), type=0, title='Which pings do you want?', single_select=False, required=False,
+                prompts=welcome + [dict(id=snowflake(), type=0, title='Which pings do you want?', single_select=False, required=False,
                               in_onboarding=True, options=options),
                          dict(id=snowflake(), type=0, title='What are you into?', single_select=False, required=False,
                               in_onboarding=True, options=topics)],
                 default_channel_ids=[self.chan[k]['id'] for k in ONBOARDING_DEFAULTS if k in self.chan],
                 enabled=True, mode=0))
-            log('members pick their pings when they join, and later under Channels & Roles')
+            log('new members get the Member role and pick their pings when they join (later: Channels & Roles)')
         except ApiError as e:
             self.warn('Channels & Roles', f'{e}. You can set it up in Server Settings > Onboarding')
 

@@ -5,6 +5,7 @@ import {
   PERM, COLOR, ephemeral, parseDuration, humanDuration, ts, snowflakeTime, userTag, clip, options, button, row, modal,
   modalValues, refuse, Refusal,
 } from './util.js';
+import { roleTo, roleProgress, roleStop } from './roles.js';
 
 const MAX_TIMEOUT = 28 * 86400000;
 const TALK = PERM.SEND | PERM.SEND_IN_THREADS | PERM.PUBLIC_THREADS | PERM.PRIVATE_THREADS;
@@ -370,6 +371,9 @@ export const commands = {
   async role(x) {
     x.need(PERM.MANAGE_ROLES, 'Manage Roles');
     const { sub, opts } = options(x.data);
+    if (sub === 'give' || sub === 'take') return roleTo(x, sub === 'give');
+    if (sub === 'progress') return roleProgress(x);
+    if (sub === 'stop') return roleStop(x);
     const { user, member } = target(x);
     const role = ((x.data.resolved || {}).roles || {})[opts.role];
     if (!member) return ephemeral(`${who(user)} isn't in the server.`);

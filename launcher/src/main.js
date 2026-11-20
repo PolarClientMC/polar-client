@@ -16,6 +16,7 @@ const crash = require('./core/crash');
 const screenshots = require('./core/screenshots');
 const updater = require('./core/updater');
 const news = require('./core/news');
+const partners = require('./core/partners');
 const { SkinLibrary, pngFromDataUrl } = require('./core/skins');
 const { DiscordPresence, activityFor } = require('./core/discord');
 const { PolarService } = require('./core/polar');
@@ -26,6 +27,8 @@ const POLAR_CONFIG = require('../package.json').polar || {};
 const UPDATE_REPO = POLAR_CONFIG.updateRepo || '';
 /** Where the News on the home page comes from (package.json > polar.newsUrl). */
 const NEWS_URL = POLAR_CONFIG.newsUrl || '';
+/** The partner servers on Home and the Partners page (package.json > polar.partnersUrl). */
+const PARTNERS_URL = POLAR_CONFIG.partnersUrl || '';
 /** The Discord application whose name and "logo" image the status shows (package.json > polar.discordClientId). */
 const discord = new DiscordPresence(POLAR_CONFIG.discordClientId);
 /** The Polar server: cosmetics, the badge, friends and settings sync (package.json > polar.serverUrl, set by deploy-server.bat). */
@@ -813,6 +816,7 @@ handle('polar:playing', () => (run && run.where && run.where.state === 'server' 
 
 // ---------------------------------------------------------------- news
 handle('news:get', () => news.load({ url: NEWS_URL, cacheFile: path.join(ROOT, 'news-cache.json'), bundledFile: path.join(__dirname, 'news.json') }));
+handle('partners:get', () => partners.load({ url: PARTNERS_URL, cacheFile: path.join(ROOT, 'partners-cache.json'), bundledFile: path.join(__dirname, 'partners.json') }));
 handle('cape:set', async (capeId) => profile.setCape(await profileToken(), capeId || null));
 handle('game:status', () => ({ running: game.running }));
 handle('folder:open', async (which) => {

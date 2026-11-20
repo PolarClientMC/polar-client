@@ -2,7 +2,7 @@
 // command (server admins can change that in Server Settings > Integrations > Polar Bot); each command checks again.
 import { PERM } from './util.js';
 
-const STR = 3, INT = 4, BOOL = 5, USER = 6, CHANNEL = 7, ROLE = 8, FILE = 11;
+const STR = 3, INT = 4, BOOL = 5, USER = 6, CHANNEL = 7, ROLE = 8, MENTIONABLE = 9, FILE = 11;
 const opt = (type, name, description, extra = {}) => ({ type, name, description, required: false, ...extra });
 const req = (type, name, description, extra = {}) => opt(type, name, description, { ...extra, required: true });
 const sub = (name, description, options = []) => ({ type: 1, name, description, options });
@@ -58,7 +58,13 @@ export const COMMANDS = [
   cmd('lockdown', 'Lock or unlock every public channel at once (for raids)', PERM.MANAGE_CHANNELS, [
     sub('start', 'Lock every channel members can talk in', [reason()]), sub('end', 'Unlock what the lockdown locked')]),
   cmd('nick', "Change or reset a member's nickname", PERM.MANAGE_NICKNAMES, [req(USER, 'user', 'Who'), opt(STR, 'nickname', 'The new nickname (empty resets it)', { max_length: 32 })]),
-  cmd('role', 'Give or take a role', PERM.MANAGE_ROLES, [
+  cmd('role', 'Give or take roles, for one member or for many', PERM.MANAGE_ROLES, [
+    sub('give', 'Give a role to a member, to @everyone, or to everyone with another role', [
+      req(ROLE, 'role', 'Which role to give'), req(MENTIONABLE, 'to', 'A member, @everyone, or a role (everyone who has it)')]),
+    sub('take', 'Take a role from a member, from @everyone, or from everyone with another role', [
+      req(ROLE, 'role', 'Which role to take'), req(MENTIONABLE, 'from', 'A member, @everyone, or a role (everyone who has it)')]),
+    sub('progress', 'How far a role change for many members has got'),
+    sub('stop', 'Stop a role change for many members'),
     sub('add', 'Give a member a role', [req(USER, 'user', 'Who'), req(ROLE, 'role', 'Which role')]),
     sub('remove', 'Take a role from a member', [req(USER, 'user', 'Who'), req(ROLE, 'role', 'Which role')])]),
   cmd('note', 'Add a private note about a member (they are not told)', PERM.MODERATE, [req(USER, 'user', 'About whom'), req(STR, 'note', 'The note', { max_length: 400 })]),

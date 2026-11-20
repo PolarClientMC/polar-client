@@ -1,6 +1,15 @@
 {
   "items": [
     {
+      "id": "release-1.0.15",
+      "date": "2026-11-20",
+      "tag": "Update",
+      "title": "Polar Client 1.0.15",
+      "body": "Partner servers are now on the Home screen and the Partners page! First partner: HazeSMP.",
+      "link": "https://github.com/PolarClientMC/polar-client/releases/tag/v1.0.15",
+      "linkLabel": "Release notes"
+    },
+    {
       "id": "release-1.0.14",
       "date": "2026-11-20",
       "tag": "Update",

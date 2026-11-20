@@ -1,7 +1,7 @@
 {
   "name": "polar-client-launcher",
   "productName": "Polar Client",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "description": "Launcher for Polar Client — the Polar Client mod on Minecraft 26.3, 1.21.11, 1.21.10, 1.16.5 (Fabric) and 1.8.9 (Legacy Fabric), with a performance pack.",
   "author": "Polar Client",
   "license": "MIT",
@@ -23,6 +23,7 @@
   "polar": {
     "updateRepo": "PolarClientMC/polar-client",
     "newsUrl": "https://raw.githubusercontent.com/PolarClientMC/polar-client/main/news.json",
+    "partnersUrl": "https://raw.githubusercontent.com/PolarClientMC/polar-client/main/partners.json",
     "discordClientId": "",
     "serverUrl": "https://polar-client.polarclientminecraft.workers.dev"
   },

@@ -158,6 +158,11 @@
             </button>
           </div>
 
+          <section class="panel partners-home" id="partnersPanel" hidden>
+            <div class="panel-head"><h2>Partner Servers</h2><button class="link-btn" data-goto="partners">All partners</button></div>
+            <div class="partner-mini-grid" id="partnerMini"></div>
+          </section>
+
           <section class="panel" id="newsPanel" hidden>
             <div class="panel-head"><h2>News</h2><button class="link-btn" id="allNews">All news</button></div>
             <div class="news-grid" id="newsGrid"></div>
@@ -189,14 +194,17 @@
         <!-- PARTNERS -->
         <section class="page" id="page-partners">
           <header class="page-head">
-            <div><h1>Partner servers</h1><p>Servers that team up with Polar Client. Partners show up here for every Polar player.</p></div>
+            <div><h1>Partner servers</h1><p>Servers that team up with Polar Client. Join them in one click.</p></div>
           </header>
+          <div class="partner-cards" id="partnerCards"></div>
           <div class="partner-banner">
             <span class="partner-mark"><svg><use href="#i-star"/></svg></span>
             <div class="grow">
               <small>OPEN FOR PARTNERS</small>
-              <h2>Still looking for collaborations</h2>
-              <p>We don't have any partner servers yet. Run a server and want your players on Polar? Come talk to us on Discord.</p>
+              <h2 class="pb-none">Still looking for collaborations</h2>
+              <h2 class="pb-some">Want your server here too?</h2>
+              <p class="pb-none">We don't have any partner servers yet. Run a server and want your players on Polar? Come talk to us on Discord.</p>
+              <p class="pb-some">Partners get a card here, a spot on Home and custom cosmetics for their players. Come talk to us on Discord.</p>
             </div>
             <button class="btn primary" data-discord><svg><use href="#i-chat"/></svg>Join our Discord</button>
           </div>
@@ -218,7 +226,6 @@
               </ol>
               <button class="btn ghost" data-discord><svg><use href="#i-external"/></svg>Open Discord</button>
             </section>
-            <div class="partner-slot"><span class="plus"><svg><use href="#i-plus"/></svg></span><b>Your server could be here</b><span>Partner servers will appear in this list.</span></div>
           </div>
         </section>
 
@@ -576,5 +583,6 @@
   <script src="cosmetics3d.js"></script>
   <script src="app.js"></script>
   <script src="redesign.js"></script>
+  <script src="partners.js"></script>
 </body>
 </html>

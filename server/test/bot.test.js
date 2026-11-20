@@ -66,6 +66,18 @@ function fakeDiscord() {
       return json(body.map((c) => ({ ...c, id: id() })));
     }
     if (is(/^\/guilds\/(\d+)$/)) return json(D.guild);
+    if (is(/^\/guilds\/\d+\/members\?(.*)$/) && method === 'GET') {
+      if (D.noMemberIntent) return err(403, 'Missing Access');
+      const q = new URLSearchParams(m[1]);
+      const after = BigInt(q.get('after') || '0');
+      const list = Object.values(D.members).filter((x) => BigInt(x.user.id) > after).sort((a, b) => (BigInt(a.user.id) < BigInt(b.user.id) ? -1 : 1));
+      return json(list.slice(0, Number(q.get('limit') || 1)));
+    }
+    if (is(/^\/guilds\/\d+\/roles$/) && method === 'POST') {
+      const role = { id: id(), position: 1, managed: false, ...body };
+      D.guild.roles.push(role);
+      return json(role);
+    }
     if (is(/^\/guilds\/\d+\/channels$/)) return json(Object.values(D.channels));
     if (is(/^\/guilds\/\d+\/members\/(\d+)$/)) {
       const mem = D.members[m[1]];
@@ -230,12 +242,12 @@ async function setup() {
     const users = {}, members = {}, roles = {};
     const options = opts.map(([k, v, type]) => {
       const t = type || (D.members[v] || D.bans[v] ? 6 : typeof v === 'number' ? 4 : typeof v === 'boolean' ? 5 : 3);
-      if (t === 6) {
+      if (t === 6 || (t === 9 && D.members[v])) {
         const mem = D.members[v];
         users[v] = mem ? mem.user : (D.bans[v] || { user: { id: v, username: 'gone' } }).user;
         if (mem) members[v] = { roles: mem.roles, joined_at: '2026-02-01T00:00:00Z', communication_disabled_until: mem.communication_disabled_until || null, permissions: '0' };
       }
-      if (t === 8) roles[v] = D.guild.roles.find((r) => r.id === v);
+      if (t === 8 || (t === 9 && !D.members[v])) roles[v] = D.guild.roles.find((r) => r.id === v);
       return { name: k, type: t, value: v };
     });
     const data = { name, type: 1, options: subName ? [{ type: 1, name: subName, options }] : options, resolved: { users, members, roles } };
@@ -601,4 +613,66 @@ test('/announce posts a titled announcement with a picture and a ping, as the bo
   assert.match(ev.res.data.content, /Mention @everyone/);
   const owner = await s.send(2, { name: 'announce', type: 1, options: [{ name: 'ping', type: 8, value: G }] }, { as: OWNER });
   assert.equal(owner.res.type, 9);
+});
+
+// ------------------------------------------------------------------ /role give and /role take
+
+test('/role give and take: one member, @everyone, and everyone with a role', async () => {
+  const s = await ready();
+  const has = (u, r) => s.D.members[u.id].roles.includes(r);
+  // one member (Founder is an admin, so MANAGE_ROLES)
+  s.D.members[ALICE.id].roles = [];
+  let r = await s.slash('role', [['role', R.member, 8], ['to', ALICE.id, 9]], { as: FOUNDER }, 'give');
+  assert.match(r.res.data.content, /Gave \*\*Member\*\* to <@100000000000000003>/);
+  assert.ok(has(ALICE, R.member));
+  r = await s.slash('role', [['role', R.member, 8], ['to', ALICE.id, 9]], { as: FOUNDER }, 'give');
+  assert.match(r.res.data.content, /already has \*\*Member\*\*/);
+
+  // @everyone: the reply says it started, the alarm does the work and edits the reply
+  r = await s.slash('role', [['role', R.pings, 8], ['to', G, 9]], { as: FOUNDER }, 'give');
+  assert.match(r.res.data.content, /Giving \*\*Update Pings\*\* to everyone/);
+  assert.ok(s.botCtx.storage.alarm <= Date.now() + 1500, 'next batch soon');
+  const busy = await s.slash('role', [['role', R.member, 8], ['to', G, 9]], { as: FOUNDER }, 'give');
+  assert.match(busy.res.data.content, /Another role change is still running/);
+  await s.bot.alarm();
+  for (const u of [OWNER, MOD, ALICE, BOB, FOUNDER]) assert.ok(has(u, R.pings), `${u.username} got it`);
+  assert.ok(!s.D.members[APP].roles.includes(R.pings), 'bots are left out');
+  assert.ok(s.D.webhooks.some((w) => w.method === 'PATCH' && /Gave \*\*Update Pings\*\* to \*\*5\*\* members/.test(w.content)), 'the reply says it finished');
+  assert.match((await s.slash('role', [], { as: FOUNDER }, 'progress')).res.data.content, /Gave \*\*Update Pings\*\* to \*\*5\*\*/);
+
+  // take it from everyone with Member (Alice and Bob)
+  r = await s.slash('role', [['role', R.pings, 8], ['from', R.member, 9]], { as: FOUNDER }, 'take');
+  assert.match(r.res.data.content, /Taking \*\*Update Pings\*\* from everyone with \*\*Member\*\*/);
+  await s.bot.alarm();
+  assert.ok(!has(ALICE, R.pings) && !has(BOB, R.pings), 'members lost it');
+  assert.ok(has(MOD, R.pings) && has(OWNER, R.pings), 'the others kept it');
+});
+
+test("/role give won't hand staff roles to many people, needs Manage Roles, and says when the member list is off", async () => {
+  const s = await ready();
+  let r = await s.slash('role', [['role', R.moderator, 8], ['to', G, 9]], { as: FOUNDER }, 'give');
+  assert.match(r.res.data.content, /has staff permissions/);
+  r = await s.slash('role', [['role', R.member, 8], ['to', G, 9]], { as: ALICE }, 'give');
+  assert.match(r.res.data.content, /Manage Roles/);
+  s.D.noMemberIntent = true;
+  r = await s.slash('role', [['role', R.member, 8], ['to', G, 9]], { as: FOUNDER }, 'give');
+  await s.bot.alarm();
+  assert.match((await s.slash('role', [], { as: FOUNDER }, 'progress')).res.data.content, /Server Members Intent/);
+  // stop
+  s.D.noMemberIntent = false;
+  await s.slash('role', [['role', R.member, 8], ['to', G, 9]], { as: FOUNDER }, 'give');
+  assert.match((await s.slash('role', [], { as: FOUNDER }, 'stop')).res.data.content, /Stopped/);
+  assert.match((await s.slash('role', [], { as: FOUNDER }, 'stop')).res.data.content, /Nothing is running/);
+});
+
+test('setup makes the Member role when the server has none', async () => {
+  const s = await setup();
+  s.D.guild.roles = s.D.guild.roles.filter((r) => r.id !== R.member);
+  const res = await worker.fetch(new Request('https://polar.test/discord/admin/setup', { method: 'POST', body: JSON.stringify({ guild: G }),
+    headers: { Authorization: 'Bearer admin-pass-123456' } }), s.env);
+  const out = await res.json();
+  assert.ok(out.done.includes('made the Member role'), JSON.stringify(out));
+  const made = s.D.guild.roles.find((r) => r.name === 'Member');
+  assert.ok(made && made.permissions === '0');
+  assert.equal(s.bot.config().memberRole, made.id);
 });

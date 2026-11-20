@@ -1,0 +1,15 @@
+{
+  "_help": "Partner servers shown in the launcher (Home and the Partners page). Add one, push to GitHub (publish.bat), and every launcher shows it within a few minutes. Images go in the partners/ folder next to this file: a square logo (256x256 or bigger) and a wide banner (about 1200x400). Set \"hidden\": true to take a partner off without deleting it.",
+  "partners": [
+    {
+      "id": "hazesmp",
+      "name": "HazeSMP",
+      "ip": "play.hazesmp.net",
+      "logo": "https://raw.githubusercontent.com/PolarClientMC/polar-client/main/partners/hazesmp/logo.png",
+      "banner": "https://raw.githubusercontent.com/PolarClientMC/polar-client/main/partners/hazesmp/banner.png",
+      "description": "Economy SMP with quests, a player market and weekly events. Premium and cracked welcome.",
+      "tags": ["SMP", "Economy", "Quests", "1.21+"],
+      "discord": "https://discord.gg/5RajxZQfH"
+    }
+  ]
+}

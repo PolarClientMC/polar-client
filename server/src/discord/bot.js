@@ -9,6 +9,7 @@ import * as moderation from './moderation.js';
 import * as tickets from './tickets.js';
 import * as giveaways from './giveaways.js';
 import * as polar from './polar.js';
+import * as roles from './roles.js';
 import { sameSecret } from '../token.js';
 
 const MODULES = [moderation, tickets, giveaways, polar];
@@ -30,6 +31,7 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS winners (giveaway INTEGER NOT NULL, user TEXT NOT NULL, code TEXT, round INTEGER NOT NULL,
      PRIMARY KEY (giveaway, user))`,
   'CREATE TABLE IF NOT EXISTS news (id TEXT PRIMARY KEY, posted INTEGER NOT NULL)',
+  roles.SCHEMA,
 ];
 
 /** One interaction: who did what, and how to answer it. */
@@ -259,6 +261,7 @@ export class Bot {
     const b = this.sql.exec('SELECT MIN(until) AS t FROM tempbans').one().t;
     if (g) next.push(g);
     if (b) next.push(b);
+    if (roles.hasRoleJob(this)) next.push(Date.now() + 1000); // a role change for many members: next batch in a second
     const when = Math.max(Date.now() + 1000, Math.min(...next));
     const cur = await this.ctx.storage.getAlarm();
     if (!cur || cur > when || cur < Date.now()) await this.ctx.storage.setAlarm(when);
@@ -266,6 +269,11 @@ export class Bot {
 
   async alarm() {
     const now = Date.now();
+    try {
+      await roles.runRoleJobs(this);
+    } catch (e) {
+      console.error('alarm roles:', e && e.stack ? e.stack : e);
+    }
     try {
       await giveaways.endDue(this, now);
       await moderation.expireBans(this, now);
@@ -312,6 +320,15 @@ export class Bot {
     if (!cfg.staff || !cfg.staff.length) {
       patch.staff = g.roles.filter((r) => /^(founder|developer|admin|administrator|moderator|mod|support team|support|staff)$/i.test(r.name)).map((r) => r.id);
     }
+    // the Member role (everyone in the community gets it); made here if the server doesn't have one yet
+    let member = g.roles.find((r) => /^members?$/i.test(r.name) && !r.managed);
+    if (!member) {
+      member = await this.rest.post(`/guilds/${gid}/roles`, { name: 'Member', color: 0x94a3b8, hoist: false, mentionable: false, permissions: '0' },
+        { reason: 'Polar Bot setup: the Member role' });
+      this.forget('guild');
+      done.push('made the Member role');
+    }
+    if (cfg.memberRole !== member.id) patch.memberRole = member.id;
     if (cfg.updatePing === undefined) {
       const ping = g.roles.find((r) => /^update pings?$/i.test(r.name));
       if (ping) patch.updatePing = ping.id;

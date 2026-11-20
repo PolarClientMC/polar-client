@@ -71,6 +71,7 @@ contextBridge.exposeInMainWorld('polar', {
     playing: () => call('polar:playing'),
   },
   news: () => call('news:get'),
+  partners: () => call('partners:get'),
   shots: {
     list: () => call('shots:list'),
     thumb: (id) => call('shots:thumb', id),

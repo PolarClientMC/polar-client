@@ -106,7 +106,11 @@ class DiscordPresence {
 
   retry() {
     clearTimeout(this.timer);
-    if (this.enabled) this.timer = setTimeout(() => this.connect(), RETRY_MS);
+    // unref: waiting to retry must never keep the process alive on its own (the tests, the app quitting)
+    if (this.enabled) {
+      this.timer = setTimeout(() => this.connect(), RETRY_MS);
+      if (this.timer.unref) this.timer.unref();
+    }
   }
 
   lost() {

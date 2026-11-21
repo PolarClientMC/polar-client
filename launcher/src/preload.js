@@ -24,6 +24,9 @@ contextBridge.exposeInMainWorld('polar', {
     select: (uuid) => call('accounts:select', uuid),
     remove: (uuid) => call('accounts:remove', uuid),
   },
+  coins: {
+    get: () => call('coins:get'),
+  },
   settings: {
     get: () => call('settings:get'),
     set: (patch) => call('settings:set', patch),
@@ -72,6 +75,12 @@ contextBridge.exposeInMainWorld('polar', {
   },
   news: () => call('news:get'),
   partners: () => call('partners:get'),
+  serverAdmin: {
+    status: () => call('adminServer:status'),
+    setToken: (token) => call('adminServer:setToken', token),
+    clearToken: () => call('adminServer:clearToken'),
+    call: (path, options) => call('adminServer:call', { path, ...(options || {}) }),
+  },
   shots: {
     list: () => call('shots:list'),
     thumb: (id) => call('shots:thumb', id),

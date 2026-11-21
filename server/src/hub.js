@@ -38,7 +38,25 @@ const SCHEMA = [
      PRIMARY KEY (uuid, other))`,
   // offline profiles: the PC that first used a name keeps it with a secret key (only its SHA-256 is kept here)
   'CREATE TABLE IF NOT EXISTS offline_keys (uuid TEXT PRIMARY KEY, key_hash TEXT NOT NULL, created INTEGER NOT NULL)',
+  // coins: kept only here, earned while the server sees the player in game (playing_since), changed by admins
+  `CREATE TABLE IF NOT EXISTS coin_balances (uuid TEXT PRIMARY KEY, name TEXT NOT NULL, coins REAL NOT NULL DEFAULT 0,
+     managed INTEGER NOT NULL DEFAULT 0, seeded INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL DEFAULT 0, playing_since INTEGER)`,
+  // partnered servers managed from the admin panel
+  `CREATE TABLE IF NOT EXISTS partners (id TEXT PRIMARY KEY, name TEXT NOT NULL, ip TEXT NOT NULL, description TEXT,
+     tags TEXT, discord TEXT, logo TEXT, banner TEXT, created INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL DEFAULT 0)`,
 ];
+
+const SEEDED_COIN_USERS = ['sharky124321345', 'CraftyCanyon'];
+const COINS_PER_HOUR = 10;
+// "where" states that mean the game is open (the launcher reports 'launcher' when it isn't)
+const IN_GAME = new Set(['menu', 'singleplayer', 'server', 'hidden']);
+// one stretch of play counts for at most this long, so a connection the server lost track of can't pile up coins
+const MAX_PLAY_STRETCH = 6 * 3600 * 1000;
+const MAX_PARTNERS = 24;
+const partnerStr = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
+const partnerImage = (v) => (typeof v === 'string' && /^https:\/\/raw\.githubusercontent\.com\/[^\s"'<>()]+$/.test(v.trim()) ? v.trim() : '');
+const partnerDiscord = (v) => (typeof v === 'string' && /^https:\/\/(discord\.gg|discord\.com\/invite)\/[A-Za-z0-9-]+\/?$/.test(v.trim()) ? v.trim() : '');
+const partnerAddress = (v) => (typeof v === 'string' && /^[A-Za-z0-9.-]{3,253}(:\d{1,5})?$/.test(v.trim()) ? v.trim().toLowerCase() : '');
 const MAX_FRIENDS = 200;
 
 export class HttpError extends Error {
@@ -80,9 +98,25 @@ export class Hub {
     this.env = env;
     this.sql = ctx.storage.sql;
     for (const s of SCHEMA) this.sql.exec(s);
+    try {
+      this.sql.exec('ALTER TABLE coin_balances ADD COLUMN playing_since INTEGER'); // tables made before coins were earned here
+    } catch {
+      // already there
+    }
     this.limits = new Map();
+    this.ensureSeedCoinUsers();
     // clients ping every so often; the runtime answers without waking this object, so idle connections cost nothing
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
+  }
+
+  ensureSeedCoinUsers() {
+    const now = Date.now();
+    for (const name of SEEDED_COIN_USERS) {
+      const uuid = offlineUuid(name);
+      this.sql.exec('INSERT OR IGNORE INTO players (uuid, name) VALUES (?, ?)', uuid, name);
+      this.sql.exec(`INSERT INTO coin_balances (uuid, name, coins, managed, seeded, updated) VALUES (?, ?, 0, 1, 1, ?)
+        ON CONFLICT (uuid) DO UPDATE SET name = excluded.name, managed = 1, seeded = 1`, uuid, name, now);
+    }
   }
 
   async fetch(request) {
@@ -103,9 +137,11 @@ export class Hub {
     if (p === '/v1/auth/offline' && m === 'POST') return this.offlineSignIn(request);
     if (p === '/v1/live') return this.live(request, url);
     if (p === '/v1/online' && m === 'GET') return this.onlineCount();
+    if (p === '/v1/partners' && m === 'GET') return json({ partners: this.adminPartnersList().partners });
     if (p.startsWith('/v1/admin/')) return this.admin(request, url);
     const me = await this.auth(request.headers.get('Authorization'));
     if (p === '/v1/me' && m === 'GET') return json(this.profile(me));
+    if (p === '/v1/me/coins' && m === 'GET') return json(this.myCoins(me.uuid));
     if (p === '/v1/me/loadout' && m === 'PUT') return json(this.setLoadout(me, await body(request)));
     if (p === '/v1/players' && m === 'POST') return json(this.lookup(await body(request, 64 * 1024)));
     if (p === '/v1/redeem' && m === 'POST') return json(this.redeem(me, await body(request)));
@@ -264,12 +300,16 @@ export class Hub {
       a.where = { state: String(msg.state || '').slice(0, 16), server: msg.server ? String(msg.server).slice(0, 100) : null };
       a.whereAt = Date.now();
       ws.serializeAttachment(a);
+      if (a.uuid) this.settleCoins(a.uuid);
     }
   }
 
   webSocketClose(ws, code, reason) {
     const a = ws.deserializeAttachment();
-    if (a && a.uuid) this.sql.exec('UPDATE players SET last_seen = ? WHERE uuid = ?', Date.now(), a.uuid);
+    if (a && a.uuid) {
+      this.sql.exec('UPDATE players SET last_seen = ? WHERE uuid = ?', Date.now(), a.uuid);
+      this.settleCoins(a.uuid, ws);
+    }
     try {
       ws.close(1000, 'Bye');
     } catch {
@@ -520,6 +560,13 @@ export class Hub {
       this.sql.exec('DELETE FROM codes WHERE code = ?', String(url.searchParams.get('code') || '').toUpperCase().replace(/[^A-Z0-9]/g, ''));
       return json(this.listCodes());
     }
+    if (p === 'coins' && method === 'GET') return json(this.adminCoinsList(url.searchParams.get('q') || ''));
+    if (p === 'coins/set' && method === 'POST') return json(await this.adminCoinsSet(await body(request)));
+    if (p === 'coins/add' && method === 'POST') return json(this.adminCoinsAdd(await body(request)));
+    if (p === 'coins/remove' && method === 'POST') return json(this.adminCoinsRemove(await body(request)));
+    if (p === 'partners' && method === 'GET') return json(this.adminPartnersList());
+    if (p === 'partners/save' && method === 'POST') return json(this.adminPartnersSave(await body(request)));
+    if (p === 'partners/delete' && method === 'POST') return json(this.adminPartnersDelete(await body(request)));
     throw new HttpError(404, 'Not found');
   }
 
@@ -549,6 +596,8 @@ export class Hub {
       codes: one('SELECT COUNT(*) FROM codes WHERE uses_left > 0'),
       items: ITEMS.size,
       special: [...ITEMS.values()].filter((i) => i.special).length,
+      coinUsers: one('SELECT COUNT(*) FROM coin_balances WHERE managed = 1 OR seeded = 1'),
+      partners: one('SELECT COUNT(*) FROM partners'),
     };
   }
 
@@ -574,20 +623,20 @@ export class Hub {
   async adminPlayer(q) {
     const p = await this.resolve(q);
     const grants = this.sql.exec('SELECT item, source, created FROM grants WHERE uuid = ? ORDER BY created DESC', p.uuid).toArray();
-    return { uuid: p.uuid, name: p.name, offline: isOfflineUuid(p.uuid), signedIn: p.first_seen > 0, lastSeen: p.last_seen, banned: Boolean(p.banned), online: this.online(p.uuid), grants, loadout: this.loadout(p.uuid) };
+    return { uuid: p.uuid, name: p.name, offline: isOfflineUuid(p.uuid), signedIn: p.first_seen > 0, lastSeen: p.last_seen, banned: Boolean(p.banned), online: this.online(p.uuid), grants, items: grants.map((g) => g.item), loadout: this.loadout(p.uuid) };
   }
 
   async adminGrant(b, give) {
     const item = ITEMS.get(String(b.item || ''));
     if (!item) throw new HttpError(400, 'Pick a cosmetic.');
-    const p = await this.resolve(b.player);
+    const p = await this.resolve(b.player || b.uuid || b.name || b.q);
     if (give) this.sql.exec('INSERT OR IGNORE INTO grants (uuid, item, source, created) VALUES (?, ?, ?, ?)', p.uuid, item.id, 'admin', Date.now());
     else this.sql.exec('DELETE FROM grants WHERE uuid = ? AND item = ?', p.uuid, item.id);
     return this.adminPlayer(p.uuid);
   }
 
   async adminBan(b) {
-    const p = await this.resolve(b.player);
+    const p = await this.resolve(b.player || b.uuid || b.name || b.q);
     this.sql.exec('UPDATE players SET banned = ? WHERE uuid = ?', b.banned ? 1 : 0, p.uuid);
     if (b.banned) {
       for (const ws of this.ctx.getWebSockets(`u:${p.uuid}`)) {
@@ -620,5 +669,185 @@ export class Hub {
       made.push(code);
     }
     return { made: made.map((c) => `${c.slice(0, 5)}-${c.slice(5, 9)}-${c.slice(9)}`), ...this.listCodes() };
+  }
+
+  // ------------------------------------------------------------------ coins
+
+  /** Is the game open for this player? Only the server's own view counts (what the live connections last said). */
+  inGame(uuid, closing = null) {
+    return this.ctx.getWebSockets(`u:${uuid}`).some((ws) => ws !== closing && ws.readyState !== 2 && ws.readyState !== 3
+      && IN_GAME.has(((ws.deserializeAttachment() || {}).where || {}).state));
+  }
+
+  /**
+   * Adds what was earned since the last check (10 an hour while the game is open) and starts or stops the clock.
+   * Coins only ever change here and in the admin panel: nothing a player's PC sends sets a balance.
+   */
+  settleCoins(uuid, closing = null) {
+    const now = Date.now();
+    const playing = this.inGame(uuid, closing);
+    const row = this.sql.exec('SELECT coins, playing_since FROM coin_balances WHERE uuid = ?', uuid).toArray()[0];
+    if (!row && !playing) return 0;
+    let coins = row ? Number(row.coins) || 0 : 0;
+    const since = row ? row.playing_since : null;
+    if (since) coins += (Math.min(Math.max(0, now - since), MAX_PLAY_STRETCH) / 3600000) * COINS_PER_HOUR;
+    const next = playing ? now : null;
+    if (!row) {
+      const name = (this.player(uuid) || {}).name || uuid;
+      this.sql.exec('INSERT INTO coin_balances (uuid, name, coins, updated, playing_since) VALUES (?, ?, 0, ?, ?)', uuid, name, now, next);
+    } else if (since || next) {
+      this.sql.exec('UPDATE coin_balances SET coins = ?, playing_since = ?, updated = ? WHERE uuid = ?', coins, next, now, uuid);
+    }
+    if (since) this.tell(uuid, { type: 'coins', coins: Math.floor(coins) });
+    return coins;
+  }
+
+  /** GET /v1/me/coins: your balance, read from the server. */
+  myCoins(uuid) {
+    const coins = this.settleCoins(uuid);
+    return { coins: Math.floor(coins), perHour: COINS_PER_HOUR, earning: this.inGame(uuid) };
+  }
+
+  // ------------------------------------------------------------------ admin coins & partners
+
+  adminCoinsList(q = '') {
+    this.ensureSeedCoinUsers();
+    const s = String(q || '').trim().toLowerCase();
+    let rows;
+    if (s) {
+      const like = `%${s.replace(/[%_]/g, '')}%`;
+      rows = this.sql.exec(`SELECT c.uuid, c.name, c.coins, c.managed, c.seeded, p.first_seen, p.last_seen, p.banned
+        FROM coin_balances c LEFT JOIN players p ON p.uuid = c.uuid
+        WHERE lower(c.name) LIKE ? OR lower(c.uuid) LIKE ?
+        ORDER BY c.seeded DESC, c.managed DESC, c.name COLLATE NOCASE LIMIT 100`, like, like).toArray();
+      if (!rows.length) {
+        // try resolving by player name/id and include if found
+        try {
+          // best-effort: search players table too
+          const pRows = this.sql.exec(`SELECT p.uuid, p.name, p.first_seen, p.last_seen, p.banned, COALESCE(c.coins,0) AS coins, COALESCE(c.managed,0) AS managed, COALESCE(c.seeded,0) AS seeded
+            FROM players p LEFT JOIN coin_balances c ON c.uuid = p.uuid
+            WHERE lower(p.name) LIKE ? OR lower(p.uuid) LIKE ? ORDER BY p.last_seen DESC LIMIT 50`, like, like).toArray();
+          rows = pRows;
+        } catch {}
+      }
+    } else {
+      rows = this.sql.exec(`SELECT c.uuid, c.name, c.coins, c.managed, c.seeded, p.first_seen, p.last_seen, p.banned
+        FROM coin_balances c LEFT JOIN players p ON p.uuid = c.uuid
+        WHERE c.managed = 1 OR c.seeded = 1 OR c.coins != 0
+        ORDER BY c.seeded DESC, c.managed DESC, c.name COLLATE NOCASE LIMIT 200`).toArray();
+    }
+    const users = rows.map((r) => ({
+      uuid: r.uuid,
+      name: r.name || (this.player(r.uuid) || {}).name || r.uuid,
+      coins: this.online(r.uuid) ? this.settleCoins(r.uuid) : Number(r.coins || 0), // live for players in game
+      managed: Boolean(r.managed),
+      seeded: Boolean(r.seeded),
+      offline: isOfflineUuid(r.uuid),
+      banned: Boolean(r.banned),
+      signedIn: Number(r.first_seen || 0) > 0,
+      lastSeen: Number(r.last_seen || 0),
+      online: this.online(r.uuid),
+    }));
+    return { users };
+  }
+
+  async adminCoinsSet(b) {
+    this.ensureSeedCoinUsers();
+    const rawCoins = Number(b.coins);
+    if (!Number.isFinite(rawCoins) || rawCoins < 0) throw new HttpError(400, 'Enter a valid coin amount.');
+    let uuid = dashed(b.uuid || b.player || '');
+    let name = String(b.name || '').trim();
+    if (!uuid) {
+      const p = await this.resolve(b.player || b.name);
+      uuid = p.uuid;
+      if (!name) name = p.name;
+    } else {
+      const p = this.player(uuid);
+      if (p && !name) name = p.name;
+    }
+    if (!name) name = String(b.player || uuid).slice(0, 16);
+    const now = Date.now();
+    this.sql.exec('INSERT OR IGNORE INTO players (uuid, name) VALUES (?, ?)', uuid, name);
+    const existing = this.sql.exec('SELECT managed, seeded, name FROM coin_balances WHERE uuid = ?', uuid).toArray()[0];
+    const managed = existing ? existing.managed : (SEEDED_COIN_USERS.some((n) => offlineUuid(n) === uuid) ? 1 : 1);
+    const seeded = existing ? existing.seeded : (SEEDED_COIN_USERS.some((n) => offlineUuid(n) === uuid) ? 1 : 0);
+    const keepName = existing && existing.name ? existing.name : name;
+    // a player in game keeps earning from now on, on top of the new balance
+    const since = this.inGame(uuid) ? now : null;
+    this.sql.exec(`INSERT INTO coin_balances (uuid, name, coins, managed, seeded, updated, playing_since) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (uuid) DO UPDATE SET coins = excluded.coins, updated = excluded.updated, playing_since = excluded.playing_since,
+        name = CASE WHEN coin_balances.name = '' THEN excluded.name ELSE coin_balances.name END`,
+      uuid, keepName, rawCoins, managed ? 1 : 0, seeded ? 1 : 0, now, since);
+    this.tell(uuid, { type: 'coins', coins: Math.floor(rawCoins) });
+    return this.adminCoinsList('');
+  }
+
+  adminCoinsAdd(b) {
+    this.ensureSeedCoinUsers();
+    const name = String(b.name || '').trim();
+    if (!NAME.test(name) || name.length < 3) throw new HttpError(400, 'Use 3-16 letters, numbers or underscores for the username.');
+    const uuid = offlineUuid(name);
+    const now = Date.now();
+    this.sql.exec('INSERT OR IGNORE INTO players (uuid, name) VALUES (?, ?)', uuid, name);
+    const seeded = SEEDED_COIN_USERS.includes(name) ? 1 : 0;
+    this.sql.exec(`INSERT INTO coin_balances (uuid, name, coins, managed, seeded, updated) VALUES (?, ?, 0, 1, ?, ?)
+      ON CONFLICT (uuid) DO UPDATE SET name = excluded.name, managed = 1, seeded = CASE WHEN coin_balances.seeded = 1 THEN 1 ELSE excluded.seeded END`, uuid, name, seeded, now);
+    return this.adminCoinsList('');
+  }
+
+  adminCoinsRemove(b) {
+    this.ensureSeedCoinUsers();
+    const uuid = dashed(b.uuid || '');
+    if (!uuid) throw new HttpError(400, 'Pick a user.');
+    const row = this.sql.exec('SELECT seeded FROM coin_balances WHERE uuid = ?', uuid).toArray()[0];
+    if (row && row.seeded) throw new HttpError(400, 'Default users cannot be removed.');
+    this.sql.exec('DELETE FROM coin_balances WHERE uuid = ?', uuid);
+    return this.adminCoinsList('');
+  }
+
+  cleanPartner(p) {
+    if (!p || typeof p !== 'object') return null;
+    const name = partnerStr(p.name, 40);
+    const ip = partnerAddress(p.ip);
+    if (!name || !ip) return null;
+    const id = partnerStr(p.id, 40).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    return {
+      id, name, ip,
+      description: partnerStr(p.description, 220),
+      tags: (Array.isArray(p.tags) ? p.tags : String(p.tags || '').split(',')).map((t) => partnerStr(t, 20)).filter(Boolean).slice(0, 5),
+      discord: partnerDiscord(p.discord),
+      logo: partnerImage(p.logo),
+      banner: partnerImage(p.banner),
+    };
+  }
+
+  adminPartnersList() {
+    const rows = this.sql.exec('SELECT id, name, ip, description, tags, discord, logo, banner, created, updated FROM partners ORDER BY updated DESC, created DESC, name COLLATE NOCASE').toArray();
+    const partners = rows.map((r) => {
+      let tags = [];
+      try { tags = JSON.parse(r.tags || '[]'); } catch { tags = []; }
+      return { id: r.id, name: r.name, ip: r.ip, description: r.description || '', tags: Array.isArray(tags) ? tags : [], discord: r.discord || '', logo: r.logo || '', banner: r.banner || '' };
+    });
+    return { partners };
+  }
+
+  adminPartnersSave(b) {
+    const cleaned = this.cleanPartner(b);
+    if (!cleaned) throw new HttpError(400, 'Enter a valid partner name and address. Logo/banner must be raw.githubusercontent.com URLs and Discord must be a discord.gg/discord.com invite link.');
+    const count = Object.values(this.sql.exec('SELECT COUNT(*) FROM partners').toArray()[0])[0];
+    const exists = this.sql.exec('SELECT 1 FROM partners WHERE id = ?', cleaned.id).toArray().length;
+    if (!exists && count >= MAX_PARTNERS) throw new HttpError(409, `You can have up to ${MAX_PARTNERS} partnered servers.`);
+    const now = Date.now();
+    this.sql.exec(`INSERT INTO partners (id, name, ip, description, tags, discord, logo, banner, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (id) DO UPDATE SET name=excluded.name, ip=excluded.ip, description=excluded.description, tags=excluded.tags, discord=excluded.discord, logo=excluded.logo, banner=excluded.banner, updated=excluded.updated`,
+      cleaned.id, cleaned.name, cleaned.ip, cleaned.description, JSON.stringify(cleaned.tags), cleaned.discord, cleaned.logo, cleaned.banner, now, now);
+    return this.adminPartnersList();
+  }
+
+  adminPartnersDelete(b) {
+    const id = partnerStr(b.id, 40).toLowerCase().replace(/[^a-z0-9-]+/g, '-');
+    if (!id) throw new HttpError(400, 'Pick a partnered server.');
+    this.sql.exec('DELETE FROM partners WHERE id = ?', id);
+    return this.adminPartnersList();
   }
 }

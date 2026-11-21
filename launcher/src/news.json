@@ -1,6 +1,15 @@
 {
   "items": [
     {
+      "id": "release-1.0.16",
+      "date": "2026-11-21",
+      "tag": "Update",
+      "title": "Polar Client 1.0.16",
+      "body": "Coins: earn 10 coins for every hour you play, shown next to your name Coins are kept safely on the Polar server Partner servers update automatically New installer with desktop and Start Menu shortcuts Fixed some text showing strange symbols",
+      "link": "https://github.com/PolarClientMC/polar-client/releases/tag/v1.0.16",
+      "linkLabel": "Release notes"
+    },
+    {
       "id": "release-1.0.15",
       "date": "2026-11-20",
       "tag": "Update",

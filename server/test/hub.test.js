@@ -364,3 +364,63 @@ test('the worker sends /v1/ to the hub and everything else to the static files',
   await worker.fetch(new Request('https://polar.test/cosmetics/catalog.json'), env);
   assert.deepEqual(seen, [['hub', 'polar', '/v1/me'], ['assets', '/cosmetics/catalog.json']]);
 });
+
+test('coins: only the server adds them (10 an hour while the game is open) and only admins change them', async () => {
+  const mojang = fakeMojang();
+  const { hub, call, ctx } = setup();
+  const realNow = Date.now;
+  let now = realNow();
+  Date.now = () => now;
+  try {
+    const alice = await signIn(call, mojang, ALICE);
+    assert.equal((await call('GET', '/v1/me/coins', { token: alice })).data.coins, 0);
+    await goOnline(hub, alice);
+    const sock = ctx.sockets.find((s) => s.tags.includes(`u:${dash(ALICE.id)}`));
+    // in the launcher: no coins
+    hub.webSocketMessage(sock, JSON.stringify({ type: 'where', state: 'launcher' }));
+    now += 3600 * 1000;
+    assert.equal((await call('GET', '/v1/me/coins', { token: alice })).data.coins, 0);
+    // in game for 90 minutes: 15
+    hub.webSocketMessage(sock, JSON.stringify({ type: 'where', state: 'server', server: 'play.example.net' }));
+    now += 90 * 60 * 1000;
+    let me = (await call('GET', '/v1/me/coins', { token: alice })).data;
+    assert.deepEqual([me.coins, me.earning], [15, true]);
+    // closing the game stops the clock, and the player is told the new balance
+    now += 30 * 60 * 1000;
+    sock.readyState = 3;
+    hub.webSocketClose(sock, 1000, '');
+    now += 5 * 3600 * 1000;
+    me = (await call('GET', '/v1/me/coins', { token: alice })).data;
+    assert.deepEqual([me.coins, me.earning], [20, false]);
+    // nothing a player sends sets coins
+    for (const [m, p] of [['POST', '/v1/me/coins'], ['PUT', '/v1/me/coins'], ['POST', '/v1/admin/coins/set']]) {
+      const r = await call(m, p, { token: alice, body: { coins: 999999 } });
+      assert.ok(r.status >= 400, `${m} ${p} refused`);
+    }
+    assert.equal((await call('GET', '/v1/me/coins', { token: alice })).data.coins, 20);
+    // the admin sets it
+    const set = await call('POST', '/v1/admin/coins/set', { admin: 'admin-pass-123456', body: { uuid: ALICE.id, coins: 500 } });
+    assert.equal(set.status, 200);
+    assert.equal((await call('GET', '/v1/me/coins', { token: alice })).data.coins, 500);
+    // a stretch the server lost track of counts for at most 6 hours
+    await goOnline(hub, alice);
+    const sock2 = ctx.sockets.filter((s) => s.tags.includes(`u:${dash(ALICE.id)}`) && s.readyState === 1)[0];
+    hub.webSocketMessage(sock2, JSON.stringify({ type: 'where', state: 'menu' }));
+    now += 48 * 3600 * 1000;
+    assert.equal((await call('GET', '/v1/me/coins', { token: alice })).data.coins, 560);
+    assert.ok(sock2.sent.some((m) => JSON.parse(m).type === 'coins'), 'the launcher hears about new coins');
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test('partners added in the admin panel are listed for every launcher', async () => {
+  const { call } = setup();
+  assert.equal((await call('POST', '/v1/admin/partners/save', { body: { name: 'X', ip: 'x.net' } })).status, 401, 'needs the password');
+  const saved = await call('POST', '/v1/admin/partners/save', { admin: 'admin-pass-123456', body: { name: 'HazeSMP', ip: 'Play.HazeSMP.net', tags: 'SMP, Economy', discord: 'https://discord.gg/5RajxZQfH', logo: 'https://evil.example/x.png' } });
+  assert.equal(saved.status, 200);
+  const pub = await call('GET', '/v1/partners');
+  assert.deepEqual(pub.data.partners.map((p) => [p.id, p.ip, p.logo, p.tags.join(',')]), [['hazesmp', 'play.hazesmp.net', '', 'SMP,Economy']]);
+  await call('POST', '/v1/admin/partners/delete', { admin: 'admin-pass-123456', body: { id: 'hazesmp' } });
+  assert.equal((await call('GET', '/v1/partners')).data.partners.length, 0);
+});

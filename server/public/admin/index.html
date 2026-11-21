@@ -95,6 +95,41 @@
     </section>
 
     <section>
+      <h2>Coins</h2>
+      <p class="muted">Search users to manage coin balances. <b>sharky124321345</b> and <b>CraftyCanyon</b> are included by default. Players earn 10 coins an hour while the game is open. The server counts it, so nobody can change their coins from their own PC.</p>
+      <div class="row">
+        <label style="flex:1">Search user<input id="coinQ" placeholder="Username or UUID"></label>
+        <button type="button" id="coinSearchBtn">Search</button>
+        <button type="button" class="ghost" id="coinShowAll">Show managed</button>
+      </div>
+      <form id="coinAddForm" class="row" style="margin-top:10px">
+        <label style="flex:1">Add managed user<input id="coinAddName" maxlength="16" placeholder="Username (3-16 letters/numbers/_)"></label>
+        <button type="submit">Add user</button>
+      </form>
+      <div class="msg" id="coinMsg"></div>
+      <div class="scroll"><table id="coinTable"></table></div>
+    </section>
+
+    <section>
+      <h2>Partnered servers</h2>
+      <p class="muted">Manage partnered servers stored on the server. Logo/banner must be <span class="code">https://raw.githubusercontent.com/...</span> URLs; Discord must be a <span class="code">discord.gg</span> / <span class="code">discord.com/invite</span> link.</p>
+      <form id="partnerForm" class="row">
+        <label style="flex:1">Name<input id="partnerName" maxlength="40" required placeholder="Server name"></label>
+        <label style="flex:1">Address<input id="partnerIp" maxlength="255" required placeholder="play.example.net"></label>
+        <label style="flex:2">Description<input id="partnerDesc" maxlength="220" placeholder="Short description"></label>
+      </form>
+      <form id="partnerForm2" class="row" style="margin-top:8px">
+        <label style="flex:1">Tags<input id="partnerTags" placeholder="SMP, Economy, 1.21+"></label>
+        <label style="flex:1">Discord<input id="partnerDiscord" placeholder="https://discord.gg/..."></label>
+        <label style="flex:1">Logo URL<input id="partnerLogo" placeholder="https://raw.githubusercontent.com/..."></label>
+        <label style="flex:1">Banner URL<input id="partnerBanner" placeholder="https://raw.githubusercontent.com/..."></label>
+        <button type="submit" id="partnerSaveBtn">Save partner</button>
+      </form>
+      <div class="msg" id="partnerMsg"></div>
+      <div class="scroll"><table id="partnerTable"></table></div>
+    </section>
+
+    <section>
       <h2>Codes</h2>
       <p class="muted">Codes hand out a cosmetic (usually a special one) to whoever redeems them in the launcher.</p>
       <form id="codeForm" class="row">
@@ -173,8 +208,73 @@ function itemOptions(select) {
 async function loadStats() {
   const s = await api('GET', 'stats');
   const cards = [['players', 'players'], ['offline', 'of them offline profiles'], ['online', 'on Polar now'], ['today', 'active today'], ['grants', 'cosmetics given'],
-    ['codes', 'codes with uses left'], ['items', 'cosmetics'], ['special', 'special cosmetics']];
+    ['codes', 'codes with uses left'], ['items', 'cosmetics'], ['special', 'special cosmetics'], ['coinUsers', 'coin users'], ['partners', 'partnered servers']];
   $('stats').replaceChildren(...cards.map(([k, label]) => h('div', { class: 'stat' }, h('b', {}, s[k] ?? 0), h('span', {}, label))));
+}
+
+function fmtCoins(n) {
+  const x = Math.abs(Number(n || 0));
+  const units = [[1e12,'T'],[1e9,'B'],[1e6,'M'],[1e3,'k']];
+  for (const [v, s] of units) if (x >= v) { const val = x / v; const d = val >= 100 ? 0 : 1; return (n < 0 ? '-' : '') + val.toFixed(d).replace(/\.0$/, '') + s; }
+  return String(Math.floor(Number(n || 0)));
+}
+
+function renderCoins(data) {
+  const users = (data && data.users) || [];
+  const rows = users.map((u) => {
+    const input = h('input', { type: 'number', min: 0, step: 1, value: Math.floor(Number(u.coins || 0)), style: 'width:110px' });
+    const save = async (value = input.value) => {
+      try {
+        renderCoins(await api('POST', 'coins/set', { uuid: u.uuid, name: u.name, coins: Number(value) }));
+        say('coinMsg', `Saved ${u.name}: ${fmtCoins(Number(value || 0))} coins.`, true);
+        loadStats();
+      } catch (e) { say('coinMsg', e.message, false); }
+    };
+    const acts = [
+      input,
+      h('button', { class: 'ghost', type: 'button', onclick: () => save() }, 'Save'),
+      h('button', { class: 'ghost', type: 'button', onclick: () => save(Math.floor(Number(u.coins || 0)) + 10) }, '+10'),
+      h('button', { class: 'ghost', type: 'button', onclick: () => save(Math.floor(Number(u.coins || 0)) + 100) }, '+100'),
+      h('button', { class: 'ghost', type: 'button', onclick: () => save(Math.max(0, Math.floor(Number(u.coins || 0)) - 10)) }, '-10'),
+    ];
+    if (!u.seeded) acts.push(h('button', { class: 'danger', type: 'button', onclick: async () => {
+      try { renderCoins(await api('POST', 'coins/remove', { uuid: u.uuid })); say('coinMsg', `Removed ${u.name}.`, true); loadStats(); }
+      catch (e) { say('coinMsg', e.message, false); }
+    } }, 'Remove'));
+    const tags = [u.seeded ? h('span', { class: 'tag gold' }, 'default') : null, u.online ? h('span', { class: 'tag on' }, 'online') : null, u.offline ? h('span', { class: 'tag' }, 'offline') : null].filter(Boolean);
+    return h('tr', {},
+      h('td', {}, h('div', { style: 'font-weight:600' }, u.name), h('div', { class: 'muted code', style: 'font-size:12px' }, u.uuid), h('div', { class: 'tags' }, ...tags)),
+      h('td', {}, fmtCoins(u.coins), h('div', { class: 'muted', style: 'font-size:12px' }, `${Math.floor(Number(u.coins || 0))} coins`)),
+      h('td', {}, h('div', { class: 'row', style: 'gap:6px' }, ...acts)));
+  });
+  $('coinTable').replaceChildren(
+    h('thead', {}, h('tr', {}, ['User', 'Coins', 'Manage'].map((t) => h('th', {}, t)))),
+    h('tbody', {}, rows.length ? rows : h('tr', {}, h('td', { colspan: 3, class: 'muted' }, 'Search for a user to manage coins.'))));
+}
+
+async function searchCoins(q) {
+  try { renderCoins(await api('GET', `coins${q ? `?q=${encodeURIComponent(q)}` : ''}`)); }
+  catch (e) { say('coinMsg', e.message, false); }
+}
+
+function renderPartners(data) {
+  const list = (data && data.partners) || [];
+  const rows = list.map((p) => h('tr', {},
+    h('td', {}, h('div', { style: 'font-weight:600' }, p.name), h('div', { class: 'muted', style: 'font-size:12px' }, p.ip), p.description ? h('div', { class: 'muted', style: 'font-size:12px' }, p.description) : null),
+    h('td', {}, (p.tags || []).join(', ') || h('span', { class: 'muted' }, '—')),
+    h('td', {}, p.discord ? h('div', { class: 'muted', style: 'font-size:12px' }, p.discord) : h('span', { class: 'muted' }, '—')),
+    h('td', { style: 'text-align:right' }, h('button', { class: 'danger', type: 'button', onclick: async () => {
+      try { renderPartners(await api('POST', 'partners/delete', { id: p.id })); say('partnerMsg', `Removed ${p.name}.`, true); loadStats(); }
+      catch (e) { say('partnerMsg', e.message, false); }
+    } }, 'Remove'))));
+  $('partnerTable').replaceChildren(
+    h('thead', {}, h('tr', {}, ['Partner', 'Tags', 'Discord', ''].map((t) => h('th', {}, t)))),
+    h('tbody', {}, rows.length ? rows : h('tr', {}, h('td', { colspan: 4, class: 'muted' }, 'No partnered servers yet.'))));
+}
+
+async function loadPartners() {
+  try { renderPartners(await api('GET', 'partners')); }
+  catch (e) { say('partnerMsg', e.message, false); }
 }
 
 function renderPlayer(p) {
@@ -261,6 +361,8 @@ async function start() {
   try { catalog = await (await fetch('/cosmetics/catalog.json')).json(); } catch { catalog = { items: [] }; }
   itemOptions($('codeItem'));
   renderCodes(await api('GET', 'codes'));
+  await loadPartners();
+  $('coinTable').replaceChildren(h('tbody', {}, h('tr', {}, h('td', { class: 'muted' }, 'Search for a user to manage coins.'))));
   $('login').classList.add('hidden');
   $('app').classList.remove('hidden');
   $('logout').classList.remove('hidden');
@@ -300,6 +402,32 @@ $('codeForm').addEventListener('submit', async (e) => {
   } catch (err) {
     say('codeMsg', err.message, false);
   }
+});
+$('coinSearchBtn').addEventListener('click', () => searchCoins($('coinQ').value.trim()));
+$('coinQ').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchCoins($('coinQ').value.trim()); } });
+$('coinShowAll').addEventListener('click', () => { $('coinQ').value = ''; searchCoins(''); });
+$('coinAddForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    renderCoins(await api('POST', 'coins/add', { name: $('coinAddName').value.trim() }));
+    say('coinMsg', `Added ${$('coinAddName').value.trim()}.`, true);
+    $('coinAddName').value = '';
+    loadStats();
+  } catch (err) { say('coinMsg', err.message, false); }
+});
+$('partnerForm2').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    const r = await api('POST', 'partners/save', {
+      name: $('partnerName').value, ip: $('partnerIp').value, description: $('partnerDesc').value,
+      tags: $('partnerTags').value, discord: $('partnerDiscord').value, logo: $('partnerLogo').value, banner: $('partnerBanner').value,
+    });
+    renderPartners(r);
+    $('partnerForm').reset();
+    $('partnerForm2').reset();
+    say('partnerMsg', 'Partner saved.', true);
+    loadStats();
+  } catch (err) { say('partnerMsg', err.message, false); }
 });
 if (password) start().catch(() => signOut());
 </script>

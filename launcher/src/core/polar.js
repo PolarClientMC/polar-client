@@ -227,6 +227,7 @@ class PolarService {
       } catch {
         return;
       }
+      if (msg && msg.type === 'coins') return this.onEvent({ type: 'coins', coins: Number(msg.coins) || 0 });
       if (!msg || (msg.type !== 'invite' && msg.type !== 'friends')) return;
       this.gameEvents.push(msg);
       if (this.gameEvents.length > 20) this.gameEvents.shift();
@@ -360,6 +361,11 @@ class PolarService {
       if (this.lookups.size > 5000) this.lookups.clear();
     }
     return out;
+  }
+
+  /** Your coins, as the server has them ({ coins, perHour, earning }). */
+  coins() {
+    return this.api('GET', '/v1/me/coins');
   }
 
   /** Your own profile: what you wear and the special cosmetics you were given. */

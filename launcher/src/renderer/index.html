@@ -52,6 +52,7 @@
     <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="2"/></symbol>
     <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></symbol>
     <symbol id="i-wifi-off" viewBox="0 0 24 24"><path d="M5 12.5a10 10 0 0 1 4-2.4M15 10.1a10 10 0 0 1 4 2.4M8.5 16a5 5 0 0 1 7 0M12 19.5h.01M3.5 3.5l17 17"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.7 7.5 9.9 4.3-1.2 7.5-5.3 7.5-9.9V6z"/><path d="M9.5 12.4 11 14l3.7-4"/></symbol>
   </svg>
 
   <div class="titlebar">
@@ -81,6 +82,7 @@
       <p class="nav-group">You</p>
       <button class="nav-item" data-page="cosmetics" title="Cosmetics"><svg><use href="#i-shirt"/></svg><span>Cosmetics</span></button>
       <button class="nav-item" data-page="friends" title="Friends"><svg><use href="#i-users"/></svg><span>Friends</span><span class="nav-badge" id="friendsBadge" hidden></span></button>
+      <button class="nav-item" data-page="admin" title="Admin"><svg><use href="#i-shield"/></svg><span>Admin</span></button>
       <div class="sidebar-spacer"></div>
       <button class="nav-discord" data-discord title="Join our Discord"><svg><use href="#i-chat"/></svg><span>Join our Discord</span></button>
       <button class="nav-item" data-page="settings" title="Settings"><svg><use href="#i-gear"/></svg><span>Settings</span></button>
@@ -92,7 +94,7 @@
       <div class="top-actions">
         <button class="account-chip" id="accountChip">
           <img id="accountAvatar" src="assets/mark-256.png" alt="" />
-          <span class="account-text"><span class="account-name" id="accountName">Sign in</span><span class="account-sub" id="accountSub">Add an account</span></span>
+          <span class="account-text"><span class="account-name-row"><span class="account-coins" id="accountCoins" hidden></span><span class="account-name" id="accountName">Sign in</span></span><span class="account-sub" id="accountSub">Add an account</span></span>
           <svg class="chev"><use href="#i-down"/></svg>
         </button>
         <button class="square-btn" id="bellBtn" aria-label="Notifications"><svg><use href="#i-bell"/></svg><span class="badge" id="bellBadge" hidden>0</span></button>
@@ -431,6 +433,84 @@
             </div>
           </header>
           <pre class="console" id="console"></pre>
+        </section>
+
+        <!-- ADMIN -->
+        <section class="page" id="page-admin">
+          <header class="page-head">
+            <div><h1>Admin Panel</h1><p>Manage server admin features. Same admin users: <b>sharky124321345</b> and <b>CraftyCanyon</b>.</p></div>
+          </header>
+
+          <section class="panel admin-section" id="serverAdminPanel">
+            <div class="panel-head"><h2>Server Admin (Polar server)</h2><div class="row-actions"><button class="btn ghost small" id="srvAdminRefresh"><svg><use href="#i-refresh"/></svg>Refresh</button><button class="btn ghost small" id="srvAdminLogout">Disconnect</button></div></div>
+            <p class="hint">Connect with the server admin password (from <code>server/admin-password.txt</code> / deploy config) to manage server-side coins, partnered servers, players/capes, and codes.</p>
+            <div class="row-actions admin-tools" id="srvAdminConnectRow">
+              <input type="password" id="srvAdminPassword" placeholder="Server admin password" spellcheck="false" style="flex:1;min-width:220px;padding:9px 11px;border-radius:10px;border:1px solid var(--line-strong);background:rgba(6,14,32,.72);color:var(--text);" />
+              <button class="btn primary" id="srvAdminConnect"><svg><use href="#i-link"/></svg>Connect</button>
+            </div>
+            <div class="hint muted" id="srvAdminStatus"></div>
+
+            <div id="srvAdminBody" hidden>
+              <div class="admin-subtabs" style="display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 10px">
+                <button class="btn ghost small srv-tab active" data-srv-tab="coins">Coins</button>
+                <button class="btn ghost small srv-tab" data-srv-tab="partners">Partners</button>
+                <button class="btn ghost small srv-tab" data-srv-tab="players">Players & Capes</button>
+                <button class="btn ghost small srv-tab" data-srv-tab="codes">Codes</button>
+                <button class="btn ghost small srv-tab" data-srv-tab="stats">Stats</button>
+              </div>
+
+              <div class="srv-admin-pane" data-srv-pane="coins">
+                <p class="hint">Search users to manage server coin balances. Seeded: <b>sharky124321345</b>, <b>CraftyCanyon</b>.</p>
+                <div class="row-actions admin-tools">
+                  <label class="browse-search admin-search"><svg><use href="#i-search"/></svg><input type="text" id="srvCoinSearch" placeholder="Search users for coins" spellcheck="false" autocomplete="off" /></label>
+                  <button class="btn ghost" id="srvCoinShowAll" type="button">Show managed</button>
+                  <form class="row-actions" id="srvCoinAddForm" autocomplete="off"><input type="text" id="srvCoinAddName" placeholder="Add username" maxlength="16" spellcheck="false" /><button class="btn primary" type="submit"><svg><use href="#i-plus"/></svg>Add</button></form>
+                </div>
+                <div class="hint muted" id="srvCoinCount"></div>
+                <div class="admin-users" id="srvCoinUsers"></div>
+              </div>
+
+              <div class="srv-admin-pane" data-srv-pane="partners" hidden>
+                <p class="hint">Server-managed partnered servers. Logo/banner must be <code>https://raw.githubusercontent.com/...</code> URLs.</p>
+                <form class="admin-partner-form" id="srvPartnerForm" autocomplete="off">
+                  <div class="admin-form-grid">
+                    <label class="field"><span>Name</span><input type="text" id="srvPartnerName" maxlength="40" required /></label>
+                    <label class="field"><span>Address</span><input type="text" id="srvPartnerIp" maxlength="255" required /></label>
+                    <label class="field admin-span"><span>Description</span><input type="text" id="srvPartnerDesc" maxlength="220" /></label>
+                    <label class="field"><span>Tags</span><input type="text" id="srvPartnerTags" placeholder="SMP, Economy" /></label>
+                    <label class="field"><span>Discord</span><input type="text" id="srvPartnerDiscord" placeholder="https://discord.gg/..." /></label>
+                    <label class="field"><span>Logo URL</span><input type="text" id="srvPartnerLogo" placeholder="https://raw.githubusercontent.com/..." /></label>
+                    <label class="field"><span>Banner URL</span><input type="text" id="srvPartnerBanner" placeholder="https://raw.githubusercontent.com/..." /></label>
+                  </div>
+                  <div class="row-actions"><button class="btn primary" type="submit"><svg><use href="#i-plus"/></svg>Save partnered server</button></div>
+                </form>
+                <div class="admin-partners" id="srvPartners"></div>
+              </div>
+
+              <div class="srv-admin-pane" data-srv-pane="players" hidden>
+                <p class="hint">Look up players to grant/revoke cosmetics (capes, etc.) and block/unblock accounts.</p>
+                <form class="row-actions" id="srvPlayerForm" autocomplete="off"><input type="text" id="srvPlayerQuery" placeholder="Minecraft name or UUID" spellcheck="false" style="flex:1" /><button class="btn primary" type="submit">Look up</button></form>
+                <div id="srvPlayerCard" style="margin-top:10px"></div>
+              </div>
+
+              <div class="srv-admin-pane" data-srv-pane="codes" hidden>
+                <p class="hint">Create and manage cosmetic redeem codes.</p>
+                <form class="admin-form-grid" id="srvCodeForm" autocomplete="off">
+                  <label class="field"><span>Cosmetic</span><select id="srvCodeItem" required></select></label>
+                  <label class="field"><span>Uses per code</span><input type="number" id="srvCodeUses" min="1" max="100000" value="1" /></label>
+                  <label class="field"><span>How many codes</span><input type="number" id="srvCodeCount" min="1" max="100" value="1" /></label>
+                  <label class="field"><span>Note</span><input type="text" id="srvCodeNote" maxlength="80" /></label>
+                  <div class="row-actions admin-span"><button class="btn primary" type="submit"><svg><use href="#i-plus"/></svg>Make codes</button></div>
+                </form>
+                <div id="srvCodeMade" style="margin-top:8px"></div>
+                <div class="admin-users" id="srvCodes" style="margin-top:10px"></div>
+              </div>
+
+              <div class="srv-admin-pane" data-srv-pane="stats" hidden>
+                <div class="settings-grid" id="srvStatsGrid"></div>
+              </div>
+            </div>
+          </section>
         </section>
       </div>
 

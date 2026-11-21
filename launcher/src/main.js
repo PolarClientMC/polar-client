@@ -21,6 +21,7 @@ const { SkinLibrary, pngFromDataUrl } = require('./core/skins');
 const { DiscordPresence, activityFor } = require('./core/discord');
 const { PolarService } = require('./core/polar');
 const { Profiles, COLORS: PROFILE_COLORS } = require('./core/profiles');
+const { request } = require('./core/http');
 
 const POLAR_CONFIG = require('../package.json').polar || {};
 /** GitHub repository the launcher updates itself from ("owner/name" in package.json > polar.updateRepo). */
@@ -129,14 +130,14 @@ const game = new GameManager({
       const finished = run;
       if (polarSync() && polar.configured) polar.pushSettings(finished.version, finished.dir).catch(() => {});
       polar.setWhere({ state: 'launcher' });
-      reportCrash(run, data).catch(() => {});
+      reportCrash(finished, data).catch(() => {});
     }
     send(`game:${type}`, data);
+    // the game is open: the Polar server counts play time from here (the Polar mod then says where you are)
+    if (type === 'started') polar.setWhere({ state: 'menu' });
     if (type === 'exit') {
       closeBridge();
       updatePresence();
-    }
-    if (type === 'exit') {
       // the window was hidden for the game: bring it back. If it was closed while the game ran, the launcher only
       // stayed open for the game, so it can quit now.
       if (hiddenForGame && liveWin()) liveWin().show();
@@ -386,6 +387,13 @@ handle('accounts:remove', async (uuid) => {
   await store.removeAccount(uuid);
   polar.connect();
   return store.listAccounts();
+});
+// coins live on the Polar server only (earned there while you play); the launcher just shows them
+handle('coins:get', async () => {
+  if (!polar.configured) return { coins: null };
+  const s = await polar.session({ signIn: false }).catch(() => null);
+  if (!s) return { coins: null };
+  return polar.coins();
 });
 // the Mods page shows and changes the active profile's mods
 handle('settings:get', () => ({ ...store.getSettings(), optionalMods: currentMods() }));
@@ -816,7 +824,69 @@ handle('polar:playing', () => (run && run.where && run.where.state === 'server' 
 
 // ---------------------------------------------------------------- news
 handle('news:get', () => news.load({ url: NEWS_URL, cacheFile: path.join(ROOT, 'news-cache.json'), bundledFile: path.join(__dirname, 'news.json') }));
-handle('partners:get', () => partners.load({ url: PARTNERS_URL, cacheFile: path.join(ROOT, 'partners-cache.json'), bundledFile: path.join(__dirname, 'partners.json') }));
+const PARTNERS_SERVER_CACHE = path.join(ROOT, 'partners-server-cache.json');
+/** Partners added in the admin panel (the Polar server's list), with the last copy kept for offline use. */
+async function serverPartners() {
+  if (!SERVER_URL) return [];
+  try {
+    const res = await request(`${SERVER_URL}/v1/partners`, { timeout: 8000, headers: { Accept: 'application/json' } });
+    const list = partners.clean(JSON.parse(await res.text()));
+    fs.promises.writeFile(PARTNERS_SERVER_CACHE, JSON.stringify({ partners: list })).catch(() => {});
+    return list;
+  } catch {
+    try {
+      return partners.clean(JSON.parse(fs.readFileSync(PARTNERS_SERVER_CACHE, 'utf8')));
+    } catch {
+      return [];
+    }
+  }
+}
+handle('partners:get', async () => {
+  const [base, fromServer] = await Promise.all([
+    partners.load({ url: PARTNERS_URL, cacheFile: path.join(ROOT, 'partners-cache.json'), bundledFile: path.join(__dirname, 'partners.json') }),
+    serverPartners(),
+  ]);
+  const seen = new Set(fromServer.map((p) => p.id));
+  return { partners: [...fromServer, ...(base.partners || []).filter((p) => !seen.has(p.id))].slice(0, 24), source: base.source };
+});
+
+function getAdminServerToken() {
+  const s = store.getPolarSession('admin-server');
+  return s && s.token ? String(s.token) : '';
+}
+
+async function adminServerApi(path, { method = 'GET', body, query, root = false, auth = true } = {}) {
+  if (!SERVER_URL) throw new Error("The Polar server isn't configured (polar.serverUrl).");
+  const token = getAdminServerToken();
+  if (auth && !token) throw new Error('Enter the server admin password first.');
+  const clean = String(path).replace(/^\/+/, '');
+  const url = new URL(root ? `${SERVER_URL}/${clean}` : `${SERVER_URL}/v1/admin/${clean}`);
+  if (query && typeof query === 'object') {
+    for (const [k, v] of Object.entries(query)) if (v != null && v !== '') url.searchParams.set(k, String(v));
+  }
+  const headers = { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) };
+  if (auth && token) headers.Authorization = `Bearer ${token}`;
+  const res = await request(url.toString(), { method, headers, body: body === undefined ? undefined : JSON.stringify(body), timeout: 15000 });
+  const text = await res.text();
+  try { return text ? JSON.parse(text) : {}; } catch { return { ok: true, text }; }
+}
+
+handle('adminServer:status', () => ({ configured: Boolean(SERVER_URL), hasToken: Boolean(getAdminServerToken()) }));
+handle('adminServer:setToken', async (token) => {
+  const t = String(token || '').trim();
+  store.setPolarSession('admin-server', t ? { token: t } : null);
+  return { configured: Boolean(SERVER_URL), hasToken: Boolean(t) };
+});
+handle('adminServer:clearToken', async () => {
+  store.setPolarSession('admin-server', null);
+  return { configured: Boolean(SERVER_URL), hasToken: false };
+});
+handle('adminServer:call', async ({ path, method = 'GET', body, query, root = false } = {}) => {
+  // root: a public file next to the API (the cosmetics catalog), read without the password
+  if (root) return adminServerApi(path, { method: 'GET', query, root: true, auth: false });
+  return adminServerApi(path, { method, body, query });
+});
+
 handle('cape:set', async (capeId) => profile.setCape(await profileToken(), capeId || null));
 handle('game:status', () => ({ running: game.running }));
 handle('folder:open', async (which) => {

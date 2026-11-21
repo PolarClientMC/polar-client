@@ -2,6 +2,25 @@
 /* global polar */
 const $ = (id) => document.getElementById(id);
 
+const ADMIN_USERNAMES = new Set(['sharky124321345', 'craftycanyon']);
+function currentAccountName() {
+  const accs = (state && state.accounts && state.accounts.accounts) || [];
+  const selected = state && state.accounts && state.accounts.selected;
+  const a = accs.find((x) => x.uuid === selected);
+  return a ? String(a.name || '').toLowerCase() : '';
+}
+function isAdminUser() {
+  return ADMIN_USERNAMES.has(currentAccountName());
+}
+function updateAdminAccess() {
+  const btn = document.querySelector('.nav-item[data-page="admin"]');
+  const admin = isAdminUser();
+  if (btn) btn.hidden = !admin;
+  const page = document.getElementById('page-admin');
+  if (!admin && page && page.classList.contains('active')) setPage('home');
+  return admin;
+}
+
 // Links in the footer. Leave a url empty to hide that button.
 const LINKS = [
   { icon: 'i-link', label: 'Website', url: '' },
@@ -114,6 +133,24 @@ function flushSettings() {
   return polar.settings.set(patch).catch((e) => toast(e.message, 'error'));
 }
 const avatarUrl = (a) => (a && a.type !== 'offline' && a.uuid ? `https://mc-heads.net/avatar/${a.uuid}/64` : 'assets/mark-256.png');
+function formatCoins(n) {
+  const sign = n < 0 ? '-' : '';
+  let x = Math.abs(Number(n || 0));
+  const units = [
+    [1e12, 'T'],
+    [1e9, 'B'],
+    [1e6, 'M'],
+    [1e3, 'k'],
+  ];
+  for (const [v, s] of units) {
+    if (x >= v) {
+      const val = x / v;
+      const d = val >= 100 ? 0 : 1;
+      return sign + val.toFixed(d).replace(/\.0$/, '').replace(/(\.\d)0$/, '$1') + s;
+    }
+  }
+  return sign + String(Math.floor(x));
+}
 // heads come from mc-heads.net; fall back to the logo when offline
 document.addEventListener('error', (e) => {
   const img = e.target;
@@ -188,6 +225,7 @@ $('gearBtn').addEventListener('click', () => setPage('settings'));
 
 function setPage(name) {
   closeMenus();
+  if (name === 'admin' && !isAdminUser()) name = 'home';
   document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.page === name));
   document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p.id === `page-${name}`));
   $('page-' + name).scrollTop = 0;
@@ -198,6 +236,7 @@ function setPage(name) {
   if (name === 'browse') openBrowse();
   if (name === 'shots') loadShots();
   if (name === 'friends') openFriends();
+  if (name === 'admin') openAdmin();
 }
 document.querySelectorAll('.nav-item').forEach((b) => b.addEventListener('click', () => setPage(b.dataset.page)));
 document.addEventListener('click', (e) => {
@@ -1945,6 +1984,9 @@ function renderAccounts() {
   $('accountSub').textContent = current ? (current.type === 'offline' ? 'Offline profile' : 'Minecraft Account') : 'Add an account';
   $('accountAvatar').src = avatarUrl(current);
   $('accountAvatar').dataset.fallback = '';
+  renderCoins();
+  loadCoins();
+  updateAdminAccess();
 
   // dropdown: quick switch
   const menu = $('accountMenu');
@@ -2027,6 +2069,36 @@ polar.on('accounts:changed', (accounts) => {
   const acc = accounts.accounts.find((a) => a.uuid === accounts.selected);
   if (acc) notify('Account switched in game', acc.name, 'ok');
 });
+// ---------------------------------------------------------------- coins
+// The balance lives on the Polar server (10 an hour while the game is open); the launcher only shows it.
+let coinsFor = null;
+function renderCoins() {
+  const el = $('accountCoins');
+  if (!el) return;
+  const c = state.coins;
+  el.hidden = c == null;
+  el.textContent = c == null ? '' : formatCoins(c);
+  el.title = c == null ? '' : `${Math.floor(c).toLocaleString()} coins · earn 10 an hour while you play`;
+}
+function loadCoins(force) {
+  const sel = state.accounts && state.accounts.selected;
+  if (!sel) {
+    coinsFor = null;
+    state.coins = null;
+    return renderCoins();
+  }
+  if (!force && coinsFor === sel) return;
+  if (coinsFor !== sel) state.coins = null;
+  coinsFor = sel;
+  polar.coins.get().then((r) => {
+    if (state.accounts.selected !== sel) return;
+    state.coins = r && r.coins != null ? Number(r.coins) : null;
+    renderCoins();
+  }).catch(() => {});
+}
+// while the game runs, check now and then (the server also tells us when it adds coins)
+setInterval(() => { if (state.running) loadCoins(true); }, 120000);
+polar.on('game:exit', () => setTimeout(() => loadCoins(true), 1500));
 
 // ---------------------------------------------------------------- Polar: shared sign-in gate
 const RARITY = { common: 'Common', rare: 'Rare', epic: 'Epic', legendary: 'Legendary', mythic: 'Mythic' };
@@ -2298,6 +2370,342 @@ $('wrRedeem').addEventListener('submit', async (e) => {
   }
 });
 
+
+// ---------------------------------------------------------------- admin
+const srvAdmin = { connected: false, tab: 'coins', coins: [], partners: [], codes: [], stats: null, player: null, catalog: null };
+
+function srvAdminSetStatus(text, kind = '') {
+  const el = $('srvAdminStatus');
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = `hint ${kind || 'muted'}`;
+}
+
+function srvShowTab(tab) {
+  srvAdmin.tab = tab || 'coins';
+  document.querySelectorAll('#page-admin .srv-tab').forEach((b) => b.classList.toggle('active', b.dataset.srvTab === srvAdmin.tab));
+  document.querySelectorAll('#page-admin .srv-admin-pane').forEach((p) => { p.hidden = p.dataset.srvPane !== srvAdmin.tab; });
+}
+
+async function srvCall(path, options = {}) {
+  return polar.serverAdmin.call(path, options);
+}
+
+async function srvEnsureCatalog() {
+  if (srvAdmin.catalog) return srvAdmin.catalog;
+  try {
+    srvAdmin.catalog = await srvCall('cosmetics/catalog.json', { root: true, auth: false, method: 'GET' });
+  } catch {
+    srvAdmin.catalog = await polar.online.catalog().catch(() => ({ items: [] }));
+  }
+  return srvAdmin.catalog || { items: [] };
+}
+
+function srvItemName(id) {
+  const items = (srvAdmin.catalog && srvAdmin.catalog.items) || [];
+  const it = items.find((x) => x.id === id);
+  return it ? it.name : (id || '—');
+}
+
+function srvRenderCoins() {
+  const list = $('srvCoinUsers');
+  const users = srvAdmin.coins || [];
+  $('srvCoinCount').textContent = `${users.length} user${users.length === 1 ? '' : 's'}`;
+  if (!users.length) {
+    list.replaceChildren(h('div', { class: 'empty', text: 'No users found. Search for a user or add one.' }));
+    return;
+  }
+  list.replaceChildren(...users.map((u) => {
+    const input = h('input', { type: 'number', min: '0', step: '1', value: String(Math.floor(Number(u.coins || 0))), class: 'admin-coins-input' });
+    const save = async (value = input.value) => {
+      try {
+        const data = await srvCall('coins/set', { method: 'POST', body: { uuid: u.uuid, name: u.name, coins: Number(value) } });
+        srvAdmin.coins = (data && data.users) || srvAdmin.coins;
+        srvRenderCoins();
+        toast(`Saved ${u.name}: ${formatCoins(Number(value || 0))} coins.`, 'ok');
+      } catch (e) { toast(e.message, 'error'); }
+    };
+    const tags = [u.seeded ? 'default' : '', u.managed ? 'managed' : '', u.online ? 'online' : '', u.offline ? 'offline' : ''].filter(Boolean).join(' · ');
+    const actions = [
+      input,
+      h('button', { class: 'btn ghost small', type: 'button', onclick: () => save() }, 'Save'),
+      h('button', { class: 'btn ghost small', type: 'button', onclick: () => save(Math.floor(Number(u.coins || 0)) + 10) }, '+10'),
+      h('button', { class: 'btn ghost small', type: 'button', onclick: () => save(Math.floor(Number(u.coins || 0)) + 100) }, '+100'),
+      h('button', { class: 'btn ghost small', type: 'button', onclick: () => save(Math.max(0, Math.floor(Number(u.coins || 0)) - 10)) }, '-10'),
+    ];
+    if (!u.seeded) {
+      actions.push(h('button', { class: 'btn danger small', type: 'button', onclick: async () => {
+        try {
+          const data = await srvCall('coins/remove', { method: 'POST', body: { uuid: u.uuid } });
+          srvAdmin.coins = (data && data.users) || [];
+          srvRenderCoins();
+          toast(`Removed ${u.name}.`);
+        } catch (e) { toast(e.message, 'error'); }
+      } }, 'Remove'));
+    }
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
+    return h('div', { class: 'admin-user-row' },
+      h('div', { class: 'admin-user-main' },
+        h('div', { class: 'admin-user-name', text: u.name }),
+        h('div', { class: 'admin-user-meta', text: `${formatCoins(u.coins)} (${Math.floor(Number(u.coins || 0))})${tags ? ` · ${tags}` : ''}` }),
+        h('div', { class: 'admin-user-meta', text: u.uuid })),
+      h('div', { class: 'admin-user-actions' }, ...actions));
+  }));
+}
+
+async function loadSrvCoins(q = '') {
+  try {
+    const data = await srvCall('coins', { query: q ? { q } : {} });
+    srvAdmin.coins = (data && data.users) || [];
+    srvRenderCoins();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function srvRenderPartners() {
+  const list = $('srvPartners');
+  const partners = srvAdmin.partners || [];
+  if (!partners.length) {
+    list.replaceChildren(h('div', { class: 'empty', text: 'No partnered servers yet.' }));
+    return;
+  }
+  list.replaceChildren(...partners.map((p) => h('div', { class: 'admin-partner-row' },
+    h('div', { class: 'admin-user-main' },
+      h('div', { class: 'admin-user-name', text: p.name }),
+      h('div', { class: 'admin-user-meta', text: `${p.ip}${p.tags && p.tags.length ? ` · ${p.tags.join(', ')}` : ''}` }),
+      p.description ? h('div', { class: 'admin-user-meta', text: p.description }) : null),
+    h('div', { class: 'admin-user-actions' },
+      h('button', { class: 'btn danger small', type: 'button', onclick: async () => {
+        try {
+          const data = await srvCall('partners/delete', { method: 'POST', body: { id: p.id } });
+          srvAdmin.partners = (data && data.partners) || [];
+          srvRenderPartners();
+          toast(`Removed ${p.name}.`);
+        } catch (e) { toast(e.message, 'error'); }
+      } }, 'Remove')))));
+}
+
+async function loadSrvPartners() {
+  try {
+    const data = await srvCall('partners');
+    srvAdmin.partners = (data && data.partners) || [];
+    srvRenderPartners();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function srvRenderCodes() {
+  const list = $('srvCodes');
+  const codes = srvAdmin.codes || [];
+  if (!codes.length) {
+    list.replaceChildren(h('div', { class: 'empty', text: 'No codes with uses left.' }));
+    return;
+  }
+  list.replaceChildren(...codes.map((c) => h('div', { class: 'admin-user-row' },
+    h('div', { class: 'admin-user-main' },
+      h('div', { class: 'admin-user-name', text: c.code }),
+      h('div', { class: 'admin-user-meta', text: `${srvItemName(c.item)} · ${c.usesLeft}/${c.uses} uses left${c.note ? ` · ${c.note}` : ''}` })),
+    h('div', { class: 'admin-user-actions' },
+      h('button', { class: 'btn ghost small', type: 'button', onclick: async () => { try { await navigator.clipboard.writeText(String(c.code).replace(/-/g, '')); toast('Copied.'); } catch { toast('Could not copy.', 'error'); } } }, 'Copy'),
+      h('button', { class: 'btn danger small', type: 'button', onclick: async () => {
+        try {
+          const data = await srvCall('codes', { method: 'DELETE', query: { code: String(c.code).replace(/-/g, '') } });
+          srvAdmin.codes = (data && data.codes) || [];
+          srvRenderCodes();
+          toast('Code deleted.');
+        } catch (e) { toast(e.message, 'error'); }
+      } }, 'Delete')))));
+}
+
+async function loadSrvCodes() {
+  try {
+    await srvEnsureCatalog();
+    const sel = $('srvCodeItem');
+    if (sel && !sel.options.length) {
+      const items = ((srvAdmin.catalog && srvAdmin.catalog.items) || []).slice().sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
+      sel.replaceChildren(...items.map((it) => h('option', { value: it.id, text: `${it.name} (${it.type}${it.special ? ', special' : ''})` })));
+    }
+    const data = await srvCall('codes');
+    srvAdmin.codes = (data && data.codes) || [];
+    srvRenderCodes();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function loadSrvStats() {
+  try {
+    const s = await srvCall('stats');
+    srvAdmin.stats = s || {};
+    const grid = $('srvStatsGrid');
+    const cards = [['players','players'],['offline','offline profiles'],['online','on Polar now'],['today','active today'],['grants','cosmetics given'],['codes','codes with uses left'],['items','cosmetics'],['special','special cosmetics'],['coinUsers','coin users'],['partners','partnered servers']];
+    grid.replaceChildren(...cards.map(([k, label]) => h('div', { class: 'setting-card' }, h('div', { style: 'font-size:22px;font-weight:700', text: String((s && s[k] != null) ? s[k] : 0) }), h('div', { class: 'muted', text: label }))));
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function srvRenderPlayer() {
+  const wrap = $('srvPlayerCard');
+  const p = srvAdmin.player;
+  if (!p) { wrap.replaceChildren(h('div', { class: 'empty', text: 'Look up a player to manage cosmetics and access.' })); return; }
+  if (p.error || p.notFound) { wrap.replaceChildren(h('div', { class: 'empty', text: p.error || 'Player not found.' })); return; }
+  const items = (srvAdmin.catalog && srvAdmin.catalog.items) || [];
+  const owned = new Set(p.items || []);
+  const head = h('div', { class: 'admin-user-row' },
+    h('div', { class: 'admin-user-main' },
+      h('div', { class: 'admin-user-name', text: `${p.name || p.uuid}${p.banned ? ' (banned)' : ''}${p.online ? ' (online)' : ''}` }),
+      h('div', { class: 'admin-user-meta', text: `${p.uuid}${p.offline ? ' · offline profile' : ''}` }),
+      h('div', { class: 'admin-user-meta', text: `${(p.items || []).length} cosmetics owned` })),
+    h('div', { class: 'admin-user-actions' },
+      h('button', { class: p.banned ? 'btn ghost small' : 'btn danger small', type: 'button', onclick: async () => {
+        try {
+          srvAdmin.player = await srvCall('ban', { method: 'POST', body: { uuid: p.uuid, banned: !p.banned } });
+          srvRenderPlayer();
+          toast(srvAdmin.player && srvAdmin.player.banned ? 'Player blocked.' : 'Player unblocked.', 'ok');
+        } catch (e) { toast(e.message, 'error'); }
+      } }, p.banned ? 'Unblock' : 'Block')));
+  const list = h('div', { class: 'admin-users', style: 'margin-top:10px;max-height:420px;overflow:auto' },
+    ...items.map((it) => {
+      const has = owned.has(it.id);
+      return h('div', { class: 'admin-user-row' },
+        h('div', { class: 'admin-user-main' },
+          h('div', { class: 'admin-user-name', text: it.name || it.id }),
+          h('div', { class: 'admin-user-meta', text: `${it.type}${it.special ? ' · special' : ''} · ${it.id}` })),
+        h('div', { class: 'admin-user-actions' },
+          has
+            ? h('button', { class: 'btn danger small', type: 'button', onclick: async () => { try { srvAdmin.player = await srvCall('revoke', { method: 'POST', body: { uuid: p.uuid, item: it.id } }); srvRenderPlayer(); toast(`Revoked ${it.name || it.id}.`); } catch (e) { toast(e.message, 'error'); } } }, 'Revoke')
+            : h('button', { class: 'btn ghost small', type: 'button', onclick: async () => { try { srvAdmin.player = await srvCall('grant', { method: 'POST', body: { uuid: p.uuid, item: it.id } }); srvRenderPlayer(); toast(`Granted ${it.name || it.id}.`, 'ok'); } catch (e) { toast(e.message, 'error'); } } }, 'Grant')));
+    }));
+  wrap.replaceChildren(head, list);
+}
+
+async function loadSrvPlayer(q) {
+  try {
+    await srvEnsureCatalog();
+    const query = String(q || '').trim();
+    if (!query) { srvAdmin.player = null; srvRenderPlayer(); return; }
+    srvAdmin.player = await srvCall('player', { query: { q: query } });
+    srvRenderPlayer();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function loadSrvActiveTab() {
+  if (!srvAdmin.connected) return;
+  if (srvAdmin.tab === 'coins') return loadSrvCoins($('srvCoinSearch') ? $('srvCoinSearch').value.trim() : '');
+  if (srvAdmin.tab === 'partners') return loadSrvPartners();
+  if (srvAdmin.tab === 'players') return srvRenderPlayer();
+  if (srvAdmin.tab === 'codes') return loadSrvCodes();
+  if (srvAdmin.tab === 'stats') return loadSrvStats();
+}
+
+async function refreshServerAdmin() {
+  try {
+    const st = await polar.serverAdmin.status();
+    const body = $('srvAdminBody');
+    const connectRow = $('srvAdminConnectRow');
+    const logoutBtn = $('srvAdminLogout');
+    if (!st || !st.configured) {
+      srvAdmin.connected = false;
+      if (connectRow) connectRow.hidden = true;
+      if (body) body.hidden = true;
+      if (logoutBtn) logoutBtn.hidden = true;
+      srvAdminSetStatus('Server admin is not configured (polar.serverUrl missing).');
+      return;
+    }
+    if (!st.hasToken) {
+      srvAdmin.connected = false;
+      if (connectRow) connectRow.hidden = false;
+      if (body) body.hidden = true;
+      if (logoutBtn) logoutBtn.hidden = true;
+      srvAdminSetStatus('Not connected. Enter the server admin password.');
+      return;
+    }
+    try {
+      await srvCall('stats');
+      srvAdmin.connected = true;
+      if (connectRow) connectRow.hidden = true;
+      if (body) body.hidden = false;
+      if (logoutBtn) logoutBtn.hidden = false;
+      srvAdminSetStatus('Connected to server admin.', 'ok');
+      await loadSrvActiveTab();
+    } catch (e) {
+      srvAdmin.connected = false;
+      if (connectRow) connectRow.hidden = false;
+      if (body) body.hidden = true;
+      if (logoutBtn) logoutBtn.hidden = false;
+      srvAdminSetStatus(`Connection failed: ${e.message}`);
+      if (/wrong admin password|401/i.test(String(e.message || ''))) {
+        await polar.serverAdmin.clearToken().catch(() => {});
+        if (logoutBtn) logoutBtn.hidden = true;
+      }
+    }
+  } catch (e) {
+    srvAdminSetStatus(e.message || 'Could not check server admin status.');
+  }
+}
+
+async function openAdmin() {
+  srvShowTab(srvAdmin.tab || 'coins');
+  refreshServerAdmin();
+}
+document.querySelectorAll('#page-admin .srv-tab').forEach((b) => b.addEventListener('click', () => { srvShowTab(b.dataset.srvTab); loadSrvActiveTab(); }));
+$('srvAdminConnect').addEventListener('click', async () => {
+  const token = String(($('srvAdminPassword') && $('srvAdminPassword').value) || '').trim();
+  if (!token) { toast('Enter the server admin password.', 'error'); return; }
+  try {
+    await polar.serverAdmin.setToken(token);
+    $('srvAdminPassword').value = '';
+    await refreshServerAdmin();
+  } catch (e) { toast(e.message, 'error'); }
+});
+$('srvAdminLogout').addEventListener('click', async () => {
+  try { await polar.serverAdmin.clearToken(); } catch {}
+  srvAdmin.connected = false; srvAdmin.coins = []; srvAdmin.partners = []; srvAdmin.codes = []; srvAdmin.stats = null; srvAdmin.player = null;
+  $('srvAdminBody').hidden = true; $('srvAdminConnectRow').hidden = false; $('srvAdminLogout').hidden = true;
+  srvAdminSetStatus('Disconnected.');
+});
+$('srvAdminRefresh').addEventListener('click', () => { if (srvAdmin.connected) loadSrvActiveTab(); else refreshServerAdmin(); });
+$('srvCoinSearch').addEventListener('input', () => { if (srvAdmin.connected) loadSrvCoins($('srvCoinSearch').value.trim()); });
+$('srvCoinShowAll').addEventListener('click', () => { $('srvCoinSearch').value = ''; if (srvAdmin.connected) loadSrvCoins(''); });
+$('srvCoinAddForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = String(($('srvCoinAddName') && $('srvCoinAddName').value) || '').trim();
+  if (!name) return;
+  try {
+    const data = await srvCall('coins/add', { method: 'POST', body: { name } });
+    srvAdmin.coins = (data && data.users) || srvAdmin.coins;
+    $('srvCoinAddName').value = '';
+    srvRenderCoins();
+    toast(`Added ${name}.`, 'ok');
+  } catch (err) { toast(err.message, 'error'); }
+});
+$('srvPartnerForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    const body = {
+      name: $('srvPartnerName').value, ip: $('srvPartnerIp').value, description: $('srvPartnerDesc').value,
+      tags: $('srvPartnerTags').value, discord: $('srvPartnerDiscord').value, logo: $('srvPartnerLogo').value, banner: $('srvPartnerBanner').value,
+    };
+    const data = await srvCall('partners/save', { method: 'POST', body });
+    srvAdmin.partners = (data && data.partners) || [];
+    $('srvPartnerForm').reset();
+    srvRenderPartners();
+    toast('Partner saved.', 'ok');
+  } catch (err) { toast(err.message, 'error'); }
+});
+$('srvPlayerForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  await loadSrvPlayer($('srvPlayerQuery').value);
+});
+$('srvCodeForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    const data = await srvCall('codes', { method: 'POST', body: { item: $('srvCodeItem').value, uses: Number($('srvCodeUses').value), count: Number($('srvCodeCount').value), note: $('srvCodeNote').value } });
+    srvAdmin.codes = (data && data.codes) || [];
+    srvRenderCodes();
+    const made = (data && data.made) || [];
+    $('srvCodeMade').replaceChildren(...made.map((c) => h('div', { class: 'admin-user-row' }, h('div', { class: 'admin-user-main' }, h('div', { class: 'admin-user-name', text: c })), h('div', { class: 'admin-user-actions' }, h('button', { class: 'btn ghost small', type: 'button', onclick: async () => { try { await navigator.clipboard.writeText(String(c).replace(/-/g, '')); toast('Copied.'); } catch { toast('Could not copy.', 'error'); } } }, 'Copy')))));
+    toast(`Made ${made.length} code${made.length === 1 ? '' : 's'}.`, 'ok');
+  } catch (err) { toast(err.message, 'error'); }
+});
+
+
+
 // ---------------------------------------------------------------- friends
 const fr = { data: null, timer: null };
 
@@ -2396,6 +2804,12 @@ function actionToast(message, label, onClick, ms = 15000) {
 }
 
 polar.on('polar:event', (msg) => {
+  if (msg.type === 'coins') {
+    state.coins = Number(msg.coins) || 0;
+    renderCoins();
+    return;
+  }
+  if (msg.type === 'status' && msg.online) loadCoins(true);
   if (msg.type === 'invite' && msg.from) {
     notify(`${msg.from.name} invited you`, `to ${msg.server}`, 'info');
     if (!state.running) actionToast(`${msg.from.name} invited you to ${msg.server}`, 'Join', () => launch(msg.server, msg.server));
@@ -2468,3 +2882,4 @@ async function checkServices() {
   setTimeout(checkLauncherUpdate, 4000);
   setTimeout(() => checkModUpdates(), 6000);
 })();
+

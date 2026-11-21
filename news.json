@@ -1,6 +1,15 @@
 {
   "items": [
     {
+      "id": "release-1.0.17",
+      "date": "2026-11-21",
+      "tag": "Update",
+      "title": "Polar Client 1.0.17",
+      "body": "Discord status: your Discord profile now shows you playing Polar Client, your version and server.",
+      "link": "https://github.com/PolarClientMC/polar-client/releases/tag/v1.0.17",
+      "linkLabel": "Release notes"
+    },
+    {
       "id": "release-1.0.16",
       "date": "2026-11-21",
       "tag": "Update",

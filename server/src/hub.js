@@ -138,6 +138,7 @@ export class Hub {
     if (p === '/v1/live') return this.live(request, url);
     if (p === '/v1/online' && m === 'GET') return this.onlineCount();
     if (p === '/v1/partners' && m === 'GET') return json({ partners: this.adminPartnersList().partners });
+    if (p === '/v1/playing' && m === 'GET') return json(this.playing(request, url));
     if (p.startsWith('/v1/admin/')) return this.admin(request, url);
     const me = await this.auth(request.headers.get('Authorization'));
     if (p === '/v1/me' && m === 'GET') return json(this.profile(me));
@@ -191,18 +192,33 @@ export class Hub {
     return json({ challenge: id, expiresIn: CHALLENGE_TTL / 1000 });
   }
 
-  /** Step 2: we ask Mojang whether that player really joined the challenge; if so, a Polar token for 30 days. */
+  /**
+   * Step 2: we ask Mojang whether that player really joined the challenge; if so, a Polar token for 30 days.
+   *
+   * Mojang sometimes refuses to answer cloud servers like this one (403, 429 or 5xx from hasJoined). Then we don't
+   * know who this is yet, and nothing the launcher says about itself can be trusted (anyone can send any name and
+   * UUID). So we tell the launcher Mojang is unreachable ("mojang-unreachable"); it asks again with the player's
+   * Minecraft access token, and we ask Minecraft's profile service whose token that is. The token is only used for
+   * that one request: it is never stored or logged.
+   */
   async verify(request) {
     this.limit(`v:${this.ip(request)}`, 30);
-    const { name, challenge } = await body(request);
+    const { name, challenge, mcToken } = await body(request);
     if (!NAME.test(String(name)) || !/^[0-9a-f]{32}$/.test(String(challenge))) throw new HttpError(400, 'Bad sign-in request');
-    const used = this.sql.exec('DELETE FROM challenges WHERE id = ? AND created >= ? RETURNING id', challenge, Date.now() - CHALLENGE_TTL).toArray();
-    if (!used.length) throw new HttpError(401, 'The sign-in took too long. Try again.');
-    const res = await fetch(`https://sessionserver.mojang.com/session/minecraft/hasJoined?username=${encodeURIComponent(name)}&serverId=${challenge}`);
-    if (res.status !== 200) throw new HttpError(401, "Minecraft didn't confirm this sign-in. Sign in again in the launcher.");
-    const profile = await res.json();
+    if (mcToken !== undefined && (typeof mcToken !== 'string' || mcToken.length < 20 || mcToken.length > 4096)) throw new HttpError(400, 'Bad sign-in request');
+    const row = this.sql.exec('SELECT id FROM challenges WHERE id = ? AND created >= ?', challenge, Date.now() - CHALLENGE_TTL).toArray();
+    if (!row.length) throw new HttpError(401, 'The sign-in took too long. Try again.');
+    let profile = await this.hasJoined(name, challenge);
+    if (profile === 'unreachable') {
+      if (!mcToken) throw new HttpError(503, "Minecraft's servers didn't answer Polar. Trying another way.", { code: 'mojang-unreachable' });
+      profile = await this.profileForToken(mcToken);
+    }
+    if (!profile) throw new HttpError(401, "Minecraft didn't confirm this sign-in. Sign in again in the launcher.");
     const uuid = dashed(profile.id);
     if (!uuid || !NAME.test(String(profile.name))) throw new HttpError(502, 'Unexpected answer from Minecraft');
+    if (String(profile.name).toLowerCase() !== String(name).toLowerCase()) throw new HttpError(401, "Minecraft didn't confirm this sign-in. Sign in again in the launcher.");
+    // spent only once it worked: Mojang can take a moment to see the join, so the launcher may ask twice
+    this.sql.exec('DELETE FROM challenges WHERE id = ?', challenge);
     const now = Date.now();
     this.sql.exec(`INSERT INTO players (uuid, name, first_seen, last_seen) VALUES (?, ?, ?, ?)
       ON CONFLICT (uuid) DO UPDATE SET name = excluded.name, last_seen = excluded.last_seen,
@@ -211,6 +227,47 @@ export class Hub {
     const expires = now + TOKEN_TTL;
     const token = await signToken(this.secret(), { u: uuid, n: profile.name, e: expires });
     return json({ token, uuid, name: profile.name, expires });
+  }
+
+  /** Mojang's answer for a join: the profile, null when the player didn't join, or 'unreachable' when Mojang won't say. */
+  async hasJoined(name, challenge) {
+    let res;
+    try {
+      res = await fetch(`https://sessionserver.mojang.com/session/minecraft/hasJoined?username=${encodeURIComponent(name)}&serverId=${challenge}`, {
+        headers: { 'User-Agent': 'PolarClient/1.0', Accept: 'application/json' },
+      });
+    } catch {
+      return 'unreachable';
+    }
+    if (res.status === 200) {
+      try {
+        return await res.json();
+      } catch {
+        return 'unreachable';
+      }
+    }
+    if (res.status === 403 || res.status === 429 || res.status >= 500) return 'unreachable';
+    return null;
+  }
+
+  /** Whose Minecraft access token this is, from Minecraft's own profile service: { id, name }, or null. */
+  async profileForToken(mcToken) {
+    let res;
+    try {
+      res = await fetch('https://api.minecraftservices.com/minecraft/profile', {
+        headers: { Authorization: `Bearer ${mcToken}`, 'User-Agent': 'PolarClient/1.0', Accept: 'application/json' },
+      });
+    } catch {
+      throw new HttpError(503, "Minecraft's servers can't be reached right now. Try again in a minute.");
+    }
+    if (res.status === 401 || res.status === 403 || res.status === 404) return null;
+    if (res.status !== 200) throw new HttpError(503, "Minecraft's servers can't be reached right now. Try again in a minute.");
+    try {
+      const p = await res.json();
+      return p && p.id && p.name ? { id: p.id, name: p.name } : null;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -423,6 +480,36 @@ export class Hub {
         // closing
       }
     }
+  }
+
+  /**
+   * For Minecraft servers (the Polar Client plugin): is this player in game with Polar Client right now, and on this
+   * server? Being "on Polar" means signed in to Polar and connected, which a hacked client can't fake the way it can
+   * fake its brand or plugin channels. On cracked servers players have name-based UUIDs, so a premium Polar player is
+   * also found by name. Answers yes or no only: never where anyone is.
+   */
+  playing(request, url) {
+    this.limit(`pl:${this.ip(request)}`, 240);
+    const q = (k) => String(url.searchParams.get(k) || '').trim();
+    const host = q('host').toLowerCase().replace(/:\d+$/, '').replace(/\.$/, '');
+    const name = q('name');
+    const candidates = new Set();
+    const uuid = dashed(q('uuid'));
+    if (uuid) candidates.add(uuid);
+    if (NAME.test(name)) {
+      for (const r of this.sql.exec('SELECT uuid FROM players WHERE name = ? COLLATE NOCASE LIMIT 4', name).toArray()) candidates.add(r.uuid);
+    }
+    for (const id of candidates) {
+      if (!this.online(id) || (this.player(id) || {}).banned) continue;
+      const w = this.where(id);
+      if (!w || w.state !== 'server') continue;
+      if (host) {
+        const on = String(w.server || '').toLowerCase().replace(/:\d+$/, '').replace(/\.$/, '');
+        if (on !== host && !on.endsWith(`.${host}`)) continue;
+      }
+      return { playing: true };
+    }
+    return { playing: false };
   }
 
   /** Where a player is right now, from the connection that reported most recently. */

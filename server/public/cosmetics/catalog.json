@@ -44,6 +44,10 @@
   {
    "id": "revon",
    "name": "Revon"
+  },
+  {
+   "id": "hazesmp",
+   "name": "HazeSMP"
   }
  ],
  "items": [
@@ -392,6 +396,19 @@
    "texture": "textures/cape_revon.png",
    "frames": 20,
    "frameTime": 60
+  },
+  {
+   "id": "cape_hazesmp",
+   "name": "HazeSMP Cape",
+   "description": "HazeSMP's partner cape: their logo over a kelp forest under water, with swaying light, rising bubbles and a shine across the logo. Wear an elytra and it changes to match.",
+   "collection": "hazesmp",
+   "rarity": "mythic",
+   "type": "cape",
+   "special": true,
+   "texture": "textures/cape_hazesmp.png",
+   "frames": 24,
+   "frameTime": 90,
+   "textureHD": "textures/cape_hazesmp_hd.png"
   },
   {
    "id": "wings_angel",
@@ -1219,6 +1236,60 @@
    }
   },
   {
+   "id": "wings_hazesmp",
+   "name": "HazeSMP Wings",
+   "description": "HazeSMP's partner wings: big ocean-blue feathered wings that fold, spread, glide and beat like a real bird's, with cloud-white tips, a light running along the feathers and bubbles drifting up.",
+   "collection": "hazesmp",
+   "rarity": "mythic",
+   "type": "wings",
+   "special": true,
+   "model": "models/wings_hazesmp.json",
+   "particles": {
+    "rate": 5,
+    "life": [
+     1.6,
+     2.6
+    ],
+    "size": [
+     0.035,
+     0.075
+    ],
+    "radius": [
+     0.35,
+     0.9
+    ],
+    "height": [
+     0.7,
+     1.6
+    ],
+    "vx": [
+     -0.05,
+     0.05
+    ],
+    "vy": [
+     0.25,
+     0.5
+    ],
+    "vz": [
+     -0.05,
+     0.05
+    ],
+    "swirl": [
+     0.1,
+     0.3
+    ],
+    "shrink": false,
+    "colors": [
+     "#bff4ff",
+     "#e8fbff",
+     "#7fdcff"
+    ],
+    "glow": true,
+    "texture": "textures/wings_hazesmp_particles.png",
+    "frames": 3
+   }
+  },
+  {
    "id": "head_halo",
    "name": "Golden Halo",
    "description": "A glowing golden halo that slowly turns.",
@@ -1406,6 +1477,16 @@
    "type": "head",
    "special": true,
    "model": "models/head_revon_crown.json"
+  },
+  {
+   "id": "head_hazesmp_crown",
+   "name": "HazeSMP Tide Crown",
+   "description": "HazeSMP's partner crown, made for Atlantis: gold, pearls and their H on a band of blue, shells and rolling waves, a golden trident at the front and a school of little fish circling it.",
+   "collection": "hazesmp",
+   "rarity": "mythic",
+   "type": "head",
+   "special": true,
+   "model": "models/head_hazesmp_crown.json"
   },
   {
    "id": "back_frost_sword",
@@ -2181,6 +2262,246 @@
     "upright": true,
     "texture": "textures/aura_revon_trail.png",
     "frames": 7
+   }
+  },
+  {
+   "id": "aura_hazesmp_trail",
+   "name": "HazeSMP Trail",
+   "description": "HazeSMP's partner trail: glowing ripples spread from every step, bubbles rise and pop, blue haze curls off the ground, a school of little fish circles you and light glints in the water.",
+   "collection": "hazesmp",
+   "rarity": "mythic",
+   "type": "aura",
+   "special": true,
+   "particles": {
+    "rate": 1,
+    "glow": false,
+    "shrink": false,
+    "layers": [
+     {
+      "frame": [
+       0,
+       4
+      ],
+      "anim": true,
+      "flat": true,
+      "glow": true,
+      "rate": 0.9,
+      "perBlock": 1.5,
+      "life": [
+       1.0,
+       1.4
+      ],
+      "size": [
+       0.26,
+       0.34
+      ],
+      "grow": 3.3,
+      "radius": [
+       0.0,
+       0.12
+      ],
+      "height": [
+       0.03,
+       0.04
+      ],
+      "fade": [
+       0.04,
+       0.8
+      ],
+      "colors": [
+       "#5ee0ff",
+       "#38b6ff",
+       "#9fe6ff"
+      ]
+     },
+     {
+      "frame": [
+       4,
+       9
+      ],
+      "anim": true,
+      "rate": 4,
+      "perBlock": 3.0,
+      "life": [
+       1.6,
+       2.6
+      ],
+      "size": [
+       0.045,
+       0.1
+      ],
+      "radius": [
+       0.15,
+       0.75
+      ],
+      "height": [
+       0.0,
+       1.2
+      ],
+      "vx": [
+       -0.03,
+       0.03
+      ],
+      "vy": [
+       0.35,
+       0.7
+      ],
+      "vz": [
+       -0.03,
+       0.03
+      ],
+      "wobble": [
+       0.045,
+       1.3
+      ],
+      "fade": [
+       0.1,
+       0.12
+      ],
+      "alpha": 0.95,
+      "colors": [
+       "#e8fbff",
+       "#bff4ff",
+       "#9fe6ff"
+      ]
+     },
+     {
+      "frame": [
+       13,
+       1
+      ],
+      "glow": true,
+      "rate": 2.2,
+      "perBlock": 1.6,
+      "life": [
+       1.8,
+       2.8
+      ],
+      "size": [
+       0.34,
+       0.52
+      ],
+      "grow": 2.2,
+      "radius": [
+       0.05,
+       0.55
+      ],
+      "height": [
+       0.02,
+       0.3
+      ],
+      "vy": [
+       0.03,
+       0.1
+      ],
+      "spin": [
+       -20,
+       20
+      ],
+      "fade": [
+       0.25,
+       0.6
+      ],
+      "alpha": 0.6,
+      "colors": [
+       "#9fe6ff",
+       "#bff4ff",
+       "#5ee0ff"
+      ]
+     },
+     {
+      "frame": [
+       14,
+       8
+      ],
+      "anim": true,
+      "face": true,
+      "rate": 1.4,
+      "life": [
+       3.0,
+       4.4
+      ],
+      "size": [
+       0.11,
+       0.16
+      ],
+      "radius": [
+       0.75,
+       1.1
+      ],
+      "height": [
+       0.35,
+       1.65
+      ],
+      "swirl": [
+       0.85,
+       1.25
+      ],
+      "vy": [
+       -0.04,
+       0.04
+      ],
+      "fade": [
+       0.15,
+       0.15
+      ],
+      "upright": true,
+      "colors": [
+       "#38b6ff",
+       "#5ee0ff",
+       "#4f9dff",
+       "#9fe6ff"
+      ]
+     },
+     {
+      "frame": [
+       22,
+       4
+      ],
+      "anim": true,
+      "glow": true,
+      "rate": 7,
+      "life": [
+       0.9,
+       1.6
+      ],
+      "size": [
+       0.06,
+       0.11
+      ],
+      "radius": [
+       0.3,
+       0.9
+      ],
+      "height": [
+       0.1,
+       2.0
+      ],
+      "vx": [
+       -0.05,
+       0.05
+      ],
+      "vy": [
+       0.04,
+       0.16
+      ],
+      "vz": [
+       -0.05,
+       0.05
+      ],
+      "fade": [
+       0.15,
+       0.3
+      ],
+      "colors": [
+       "#bff4ff",
+       "#5ee0ff",
+       "#ffffff"
+      ]
+     }
+    ],
+    "texture": "textures/aura_hazesmp_trail.png",
+    "frames": 26
    }
   }
  ],

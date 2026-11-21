@@ -20,8 +20,10 @@ import capes  # noqa: E402
 import heads  # noqa: E402
 import wings  # noqa: E402
 import revon  # noqa: E402
+import hazesmp  # noqa: E402
 
 revon.register()  # Revon's set (code-only): a cape with its elytra, a crown, wings and a trail
+hazesmp.register()  # HazeSMP's set (partner server): an HD cape with its elytra, from their logo and banner
 
 KINDS = [('cape', capes), ('wings', wings), ('head', heads), ('back', backs), ('aura', auras)]
 COLLECTIONS = [
@@ -36,6 +38,7 @@ COLLECTIONS = [
     {'id': 'classic', 'name': 'Classic'},
     {'id': 'special', 'name': 'Special'},
     revon.COLLECTION,
+    hazesmp.COLLECTION,
 ]
 RARITY = ['common', 'rare', 'epic', 'legendary', 'mythic']
 FIELDS = ('id', 'name', 'description', 'collection', 'rarity')

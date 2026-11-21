@@ -24,6 +24,11 @@ final class Mat4 {
 		return new float[] {s, 0, 0, 0, 0, s, 0, 0, 0, 0, s, 0, x - s * x, y - s * y, z - s * z, 1};
 	}
 
+	/** Stretches along each axis (around the origin of the space it's applied in). */
+	static float[] scale(float x, float y, float z) {
+		return new float[] {x, 0, 0, 0, 0, y, 0, 0, 0, 0, z, 0, 0, 0, 0, 1};
+	}
+
 	static float[] translate(float x, float y, float z) {
 		return new float[] {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, z, 1};
 	}

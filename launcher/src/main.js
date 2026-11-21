@@ -85,11 +85,44 @@ function closeBridge() {
   }
 }
 
+let rpcPartners = [];
+function normServer(v) {
+  return String(v || '').trim().toLowerCase().replace(/\/$/, '');
+}
+function normHost(v) {
+  return normServer(v).replace(/:\d+$/, '');
+}
+function partnerForServer(server) {
+  const raw = normServer(server);
+  const host = normHost(server);
+  if (!raw) return null;
+  return rpcPartners.find((p) => {
+    const ip = normServer(p.ip);
+    const pHost = normHost(p.ip);
+    return ip === raw || (pHost && pHost === host);
+  }) || null;
+}
+async function refreshRpcPartners() {
+  try {
+    const [base, fromServer] = await Promise.all([
+      partners.load({ url: PARTNERS_URL, cacheFile: path.join(ROOT, 'partners-cache.json'), bundledFile: path.join(__dirname, 'partners.json') }),
+      serverPartners(),
+    ]);
+    const seen = new Set(fromServer.map((p) => p.id));
+    rpcPartners = [...fromServer, ...(base.partners || []).filter((p) => !seen.has(p.id))].slice(0, 24);
+    if (run && run.where && run.where.state === 'server') updatePresence();
+  } catch {
+    // keep previous cache
+  }
+}
+
 /** Shows the launcher's state on Discord: the version picked, or the game you're playing and where. */
 function updatePresence() {
   const settings = store.getSettings();
   if (settings.discordStatus === false) return discord.stop();
-  discord.set(activityFor({ version: selectedVersion().id, game: run ? { version: run.version, startedAt: run.startedAt, where: run.where } : null }));
+  const where = run && run.where ? run.where : null;
+  const partner = where && where.state === 'server' ? partnerForServer(where.server) : null;
+  discord.set(activityFor({ version: selectedVersion().id, game: run ? { version: run.version, startedAt: run.startedAt, where: run.where } : null, partner }));
 }
 
 /** The launcher window, or null once it's closed (a closed window's object throws "Object has been destroyed" if used). */
@@ -388,12 +421,26 @@ handle('accounts:remove', async (uuid) => {
   polar.connect();
   return store.listAccounts();
 });
-// coins live on the Polar server only (earned there while you play); the launcher just shows them
+// coins live on the Polar server (earned there while you play); cache locally so they still show offline/unavailable
 handle('coins:get', async () => {
-  if (!polar.configured) return { coins: null };
+  const { selected } = store.listAccounts();
+  const cached = Number((store.getSettings().coinCache || {})[selected] ?? NaN);
+  const fallback = Number.isFinite(cached) ? { coins: cached, cached: true } : { coins: null };
+  if (!polar.configured || !selected) return fallback;
   const s = await polar.session({ signIn: false }).catch(() => null);
-  if (!s) return { coins: null };
-  return polar.coins();
+  if (!s) return fallback;
+  try {
+    const res = await polar.coins();
+    const coins = Number(res?.coins);
+    if (Number.isFinite(coins)) {
+      const settings = store.getSettings();
+      await store.setSettings({ coinCache: { ...(settings.coinCache || {}), [selected]: coins } });
+      return { ...res, coins };
+    }
+  } catch {
+    // fall through to cached value
+  }
+  return fallback;
 });
 // the Mods page shows and changes the active profile's mods
 handle('settings:get', () => ({ ...store.getSettings(), optionalMods: currentMods() }));
@@ -847,7 +894,10 @@ handle('partners:get', async () => {
     serverPartners(),
   ]);
   const seen = new Set(fromServer.map((p) => p.id));
-  return { partners: [...fromServer, ...(base.partners || []).filter((p) => !seen.has(p.id))].slice(0, 24), source: base.source };
+  const list = [...fromServer, ...(base.partners || []).filter((p) => !seen.has(p.id))].slice(0, 24);
+  rpcPartners = list;
+  if (run && run.where && run.where.state === 'server') updatePresence();
+  return { partners: list, source: base.source };
 });
 
 function getAdminServerToken() {
@@ -932,6 +982,7 @@ app.whenReady().then(() => {
   });
   createWindow();
   updatePresence();
+  refreshRpcPartners().catch(() => {});
   polar.connect();
 });
 app.on('before-quit', () => {

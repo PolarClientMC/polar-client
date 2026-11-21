@@ -173,7 +173,7 @@
       if (state.skin) waits.push(texture(state.skin).loaded);
       await Promise.all(Object.values(state.loadout).map(async (item) => {
         if (!item) return;
-        if (item.texture) waits.push(texture(base + item.texture).loaded);
+        if (item.texture) waits.push(texture(base + (item.textureHD || item.texture)).loaded);
         if (item.particles) waits.push(texture(base + item.particles.texture).loaded);
         if (item.model && !state.models[item.model]) {
           state.models[item.model] = 'loading';
@@ -278,6 +278,23 @@
       };
     }
 
+    // Keyframe clips and springs (keyframes.js): the wardrobe's poses map onto the game's states.
+    const KF = window.PolarKeyframes;
+    function keyframed(item, model, dt, moving) {
+      if (!KF || (!model.animations && !model.physics)) return null;
+      if (!model._clips) { model._clips = KF.clips(model.animations); model._springs = KF.springs(model.physics); }
+      const rigs = state.rigs || (state.rigs = {});
+      const r = rigs[item.id] || (rigs[item.id] = KF.rig());
+      const pose = state.pose || 'idle';
+      const p = {
+        moving, sprinting: pose === 'sprint', sneaking: pose === 'sneak', onGround: pose !== 'glide' && pose !== 'fly' && pose !== 'fall',
+        flying: pose === 'fly', gliding: pose === 'glide', bodyYaw: state.bodyYaw || 0,
+      };
+      const out = {};
+      KF.play(model._clips, model._springs, r, p, dt, out);
+      return out;
+    }
+
     function drawModel(item, model, anchorMat, dt, moving, motion = NO_MOTION) {
       const tex = texture(base + model.texture);
       const glowTex = model.glow ? texture(base + model.glow) : null;
@@ -286,9 +303,15 @@
       const frame = frames > 1 ? Math.floor(now() / (model.frameTime || 100)) % frames : 0;
       const tint = hexColor(item.color || item.defaultColor);
       const anims = {};
+      const keyed = keyframed(item, model, dt, moving);
+      if (keyed) {
+        for (const [bone, v] of Object.entries(keyed)) anims[bone] = { rot: v.slice(0, 3), pos: v.slice(3, 6), scale: v.slice(6, 9) };
+        // clips do their own folding and gliding
+        if (model._clips && Object.keys(model._clips).length) motion = NO_MOTION;
+      }
       for (const a of model.anims || []) {
         const v = animValue(item, a, dt, moving, motion);
-        const cur = anims[a.bone] || { rot: [0, 0, 0], pos: [0, 0, 0] };
+        const cur = anims[a.bone] || { rot: [0, 0, 0], pos: [0, 0, 0], scale: [1, 1, 1] };
         cur.rot = cur.rot.map((r, i) => r + (v.rot ? v.rot[i] : 0));
         cur.pos = cur.pos.map((p, i) => p + (v.pos ? v.pos[i] : 0));
         anims[a.bone] = cur;
@@ -304,7 +327,9 @@
           extra[2] = side * (10 * motion.fold - 7 * motion.glide);
         }
         const rot = bone.rot.map((r, i) => (r + an.rot[i] + extra[i]) * RAD);
-        const m = M.mul(parent, partMatrix(pivot, rot));
+        let m = M.mul(parent, partMatrix(pivot, rot));
+        const sc = an.scale;
+        if (sc && (sc[0] !== 1 || sc[1] !== 1 || sc[2] !== 1)) m = M.mul(m, M.s(sc[0], sc[1], sc[2]));
         for (const cube of bone.cubes) {
           const col = cube.tint ? [...tint, 1] : [1, 1, 1, 1];
           for (const q of boxQuads(cube.from, cube.to, cube.faces, cube.inflate || 0)) {
@@ -322,61 +347,103 @@
     }
 
     // ---------------------------------------------------------------- aura particles (world space, player at 0,0,0)
+    // The same rules as the mod (dev.polarclient.cosmetics.Aura): an aura is one emitter or several layers, each with
+    // its own settings on top of the aura's. The player stands still here; when it walks, the world slides back past
+    // it (state.travel, blocks a second), so trails stream away behind like in game.
+    function auraLayers(P) {
+      if (P._layers) return P._layers;
+      const frames = P.frames || 1;
+      const list = Array.isArray(P.layers) && P.layers.length ? P.layers.map((l) => ({ ...P, ...l, layers: undefined })) : [P];
+      for (const L of list) {
+        const fr = Array.isArray(L.frame) ? L.frame : [0, frames];
+        L._start = fr[0] >= 0 && fr[0] < frames ? fr[0] : 0;
+        L._count = fr[1] > 0 && L._start + fr[1] <= frames ? fr[1] : frames - L._start;
+        const fd = Array.isArray(L.fade) ? L.fade : [0.2, 1 / 3];
+        L._fadeIn = Math.max(0.001, fd[0]);
+        L._fadeOut = Math.max(0.001, fd[fd.length - 1]);
+      }
+      return (P._layers = list);
+    }
+
     function stepParticles(item, dt) {
       const P = item.particles;
       if (!P) return;
-      const rand = (r) => (Array.isArray(r) ? r[0] + Math.random() * (r[1] - r[0]) : r || 0);
-      state.spawnAcc += dt * (P.rate || 6) * state.boost; // boost: busier auras for thumbnails
-      while (state.spawnAcc >= 1 && state.particles.length < 200 * state.boost) {
-        state.spawnAcc -= 1;
-        const ang = Math.random() * Math.PI * 2, rad = rand(P.radius || [0.3, 0.7]);
-        const h = rand(P.height || [0, 1.9]);
-        state.particles.push({
-          x: Math.cos(ang) * rad, y: h, z: Math.sin(ang) * rad,
-          vx: rand(P.vx), vy: rand(P.vy), vz: rand(P.vz), age: 0, life: rand(P.life || [1.5, 2.5]),
-          size: rand(P.size || [0.08, 0.14]), spin: rand(P.spin || 0) * RAD, rot: P.upright ? 0 : Math.random() * 6.28,
-          col: hexColor((P.colors || ['#ffffff'])[Math.floor(Math.random() * (P.colors || ['#ffffff']).length)]),
-          frame: Math.floor(Math.random() * (P.frames || 1)), swirl: rand(P.swirl || 0), ang, rad,
-        });
+      const rand = (r) => (Array.isArray(r) ? r[0] + Math.random() * (r[r.length - 1] - r[0]) : r || 0);
+      const travel = state.travel != null ? state.travel : state.walking * (state.pose === 'sprint' ? 5.6 : 4.3);
+      const layers = auraLayers(P);
+      if (!Array.isArray(state.particles) || state.particles.length !== layers.length) {
+        state.particles = layers.map(() => []);
+        state.spawnAcc = layers.map(() => 0);
       }
-      for (const p of state.particles) {
-        p.age += dt;
-        p.vy -= (P.gravity || 0) * dt;
-        if (p.swirl) {
-          p.ang += p.swirl * dt;
-          p.x = Math.cos(p.ang) * p.rad;
-          p.z = Math.sin(p.ang) * p.rad;
-        } else {
-          p.x += p.vx * dt;
-          p.z += p.vz * dt;
+      const airborne = state.pose === 'glide' || state.pose === 'fly' || state.pose === 'fall';
+      layers.forEach((L, li) => {
+        const list = state.particles[li];
+        state.spawnAcc[li] += dt * (L.rate || 0) * state.boost; // boost: busier auras for thumbnails
+        if (!airborne) state.spawnAcc[li] += travel * dt * (L.perBlock || 0) * state.boost;
+        while (state.spawnAcc[li] >= 1 && list.length < 160 * state.boost) {
+          state.spawnAcc[li] -= 1;
+          const ang = Math.random() * Math.PI * 2, rad = rand(L.radius || [0.3, 0.7]);
+          const h = rand(L.height || [0, 1.9]);
+          const cols = L.colors || ['#ffffff'];
+          list.push({
+            x: Math.cos(ang) * rad, y: h, z: Math.sin(ang) * rad,
+            vx: rand(L.vx), vy: rand(L.vy), vz: rand(L.vz), age: 0, life: rand(L.life || [1.5, 2.5]),
+            size: rand(L.size || [0.08, 0.14]), spin: rand(L.spin || 0) * RAD, rot: L.upright ? 0 : Math.random() * 6.28,
+            col: hexColor(cols[Math.floor(Math.random() * cols.length)]),
+            frame: L._start + Math.floor(Math.random() * L._count), swirl: rand(L.swirl || 0), ang, rad,
+            phase: Math.random() * 6.28, wdir: Math.random() * 6.28,
+          });
         }
-        p.y += p.vy * dt;
-        p.rot += p.spin * dt;
-      }
-      state.particles = state.particles.filter((p) => p.age < p.life);
+        for (const p of list) {
+          p.age += dt;
+          p.vy -= (L.gravity || 0) * dt;
+          if (p.swirl) {
+            p.ang += p.swirl * dt;
+            p.x = Math.cos(p.ang) * p.rad;
+            p.z = Math.sin(p.ang) * p.rad;
+          } else {
+            p.x += p.vx * dt;
+            p.z += (p.vz - travel) * dt;
+          }
+          p.y += p.vy * dt;
+          p.rot += p.spin * dt;
+        }
+        state.particles[li] = list.filter((p) => p.age < p.life);
+      });
     }
 
     function drawParticles(item, camRight, camUp) {
       const P = item.particles;
       const tex = P && texture(base + P.texture);
-      if (!tex || !tex.ready) return;
+      if (!tex || !tex.ready || !Array.isArray(state.particles)) return;
       const frames = P.frames || 1;
-      for (const p of state.particles) {
-        const t = p.age / p.life;
-        const alpha = Math.min(1, t * 5) * Math.min(1, (1 - t) * 3);
-        const s = p.size * (P.shrink ? 1 - t * 0.6 : 1) * (state.boost > 1 ? 1.6 : 1);
-        const cr = Math.cos(p.rot), sr = Math.sin(p.rot);
-        const corner = (dx, dy) => {
-          const rx = dx * cr - dy * sr, ry = dx * sr + dy * cr;
-          return [p.x + (camRight[0] * rx + camUp[0] * ry) * s, p.y + (camRight[1] * rx + camUp[1] * ry) * s, p.z + (camRight[2] * rx + camUp[2] * ry) * s];
-        };
-        const fw = tex.w / frames;
-        const u0 = p.frame * fw, u1 = u0 + fw;
-        batch.push({ tex: tex.tex, layer: P.glow ? 'glow' : 'translucent',
-          pts: [corner(-1, 1), corner(1, 1), corner(1, -1), corner(-1, -1)],
-          uvs: [[u0 / tex.w, 0], [u1 / tex.w, 0], [u1 / tex.w, 1], [u0 / tex.w, 1]],
-          c: [p.col[0], p.col[1], p.col[2], alpha], depth: 0 });
-      }
+      const travel = state.travel != null ? state.travel : state.walking * (state.pose === 'sprint' ? 5.6 : 4.3);
+      auraLayers(P).forEach((L, li) => {
+        for (const p of state.particles[li] || []) {
+          const t = p.age / p.life;
+          const alpha = Math.min(1, t / L._fadeIn) * Math.min(1, (1 - t) / L._fadeOut) * (L.alpha != null ? L.alpha : 1);
+          const s = p.size * (L.grow > 0 ? 1 + (L.grow - 1) * t : L.shrink ? 1 - t * 0.6 : 1) * (state.boost > 1 ? 1.6 : 1);
+          const cr = Math.cos(p.rot), sr = Math.sin(p.rot);
+          const w = Array.isArray(L.wobble) && L.wobble[0] ? L.wobble[0] * Math.sin(p.phase + 2 * Math.PI * L.wobble[1] * p.age) : 0;
+          const cx = p.x + w * Math.cos(p.wdir), cz = p.z + w * Math.sin(p.wdir);
+          const corner = (dx, dy) => {
+            const rx = dx * cr - dy * sr, ry = dx * sr + dy * cr;
+            if (L.flat) return [cx - rx * s, p.y, cz + ry * s];
+            return [cx + (camRight[0] * rx + camUp[0] * ry) * s, p.y + (camRight[1] * rx + camUp[1] * ry) * s, cz + (camRight[2] * rx + camUp[2] * ry) * s];
+          };
+          const frame = L.anim ? L._start + Math.min(L._count - 1, Math.floor(t * L._count)) : p.frame;
+          const fw = tex.w / frames;
+          let u0 = frame * fw, u1 = u0 + fw;
+          if (L.face) {
+            const mvx = p.swirl ? -Math.sin(p.ang) * p.swirl : p.vx, mvz = p.swirl ? Math.cos(p.ang) * p.swirl : p.vz - travel;
+            if (mvx * camRight[0] + mvz * camRight[2] < 0) [u0, u1] = [u1, u0];
+          }
+          batch.push({ tex: tex.tex, layer: L.glow ? 'glow' : 'translucent',
+            pts: [corner(-1, 1), corner(1, 1), corner(1, -1), corner(-1, -1)],
+            uvs: [[u0 / tex.w, 0], [u1 / tex.w, 0], [u1 / tex.w, 1], [u0 / tex.w, 1]],
+            c: [p.col[0], p.col[1], p.col[2], alpha], depth: 0 });
+        }
+      });
     }
 
     function now() {
@@ -423,18 +490,36 @@
       // cape: CapeLayer's pose (0.125 blocks behind the shoulders, tilted out a little)
       const cape = state.loadout.cape;
       if (cape && cape.texture) {
-        const ct = texture(base + cape.texture);
+        const ct = texture(base + (cape.textureHD || cape.texture)); // UVs are in 64 x 32 units, so any scale fits
         if (ct && ct.ready) {
           const frames = cape.frames || 1;
           const frame = frames > 1 ? Math.floor(now() / (cape.frameTime || 100)) % frames : 0;
-          const lift = (6 + moving * 22 + Math.sin(t * 2) * 1.5) * RAD;
-          let m = M.mul(mats.body, M.t(0, 0, 0.125));
-          m = M.mul(m, M.rx(lift));
-          m = M.mul(m, M.ry(Math.PI));
-          const rects = boxUv(0, 0, 10, 16, 1);
-          for (const q of boxQuads([-5, 0, -1], [5, 16, 0], rects)) {
-            quad(m, q, ct.tex, 64, 32, [1, 1, 1, 1], false, frame, frames);
-            batch[batch.length - 1].layer = 'cutout';
+          if (state.elytra) {
+            // an elytra in the cape's texture (Minecraft draws that instead of the cape): ElytraModel's two wings,
+            // 0.125 blocks behind the body; the right wing is the left one mirrored
+            const glide = state.pose === 'glide' || state.pose === 'fly';
+            const crouch = state.pose === 'sneak';
+            const rot = glide ? [0.35 + Math.sin(t * 2) * 0.03, 0, -1.15] : crouch ? [0.6981, 0, -Math.PI / 4] : [0.2618, 0, -0.2618];
+            const back = M.mul(mats.body, M.t(0, 0, 0.125));
+            const rects = boxUv(22, 0, 10, 20, 2);
+            for (const side of [1, -1]) {
+              let m = side > 0 ? back : M.mul(back, M.s(-1, 1, 1));
+              m = M.mul(m, partMatrix([5, crouch ? 3 : 0, 0], rot));
+              for (const q of boxQuads([-10, 0, 0], [0, 20, 2], rects)) {
+                quad(m, q, ct.tex, 64, 32, [1, 1, 1, 1], false, frame, frames);
+                batch[batch.length - 1].layer = 'cutout';
+              }
+            }
+          } else {
+            const lift = (6 + moving * 22 + Math.sin(t * 2) * 1.5) * RAD;
+            let m = M.mul(mats.body, M.t(0, 0, 0.125));
+            m = M.mul(m, M.rx(lift));
+            m = M.mul(m, M.ry(Math.PI));
+            const rects = boxUv(0, 0, 10, 16, 1);
+            for (const q of boxQuads([-5, 0, -1], [5, 16, 0], rects)) {
+              quad(m, q, ct.tex, 64, 32, [1, 1, 1, 1], false, frame, frames);
+              batch[batch.length - 1].layer = 'cutout';
+            }
           }
         }
       }

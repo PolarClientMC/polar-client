@@ -113,6 +113,7 @@ class PolarService {
   async signIn(acc) {
     if (!acc) throw new PolarError('Add an account to use Polar cosmetics and friends.', 400);
     if (acc.type === 'offline') return this.signInOffline(acc);
+    if (!acc.mcToken) throw new PolarError('Your Minecraft session is missing. Sign in to your account again in the launcher.', 401);
     const { challenge } = await this.request('POST', '/v1/auth/challenge');
     let res;
     try {
@@ -125,8 +126,30 @@ class PolarService {
     } catch {
       throw new PolarError("Can't reach Minecraft's servers to sign you in.", 0);
     }
-    if (res.status !== 204 && res.status !== 200) throw new PolarError('Minecraft refused the sign-in. Sign in to your account again in the launcher.', 401);
-    const v = await this.request('POST', '/v1/auth/verify', { body: { name: acc.name, challenge } });
+    if (res.status !== 204 && res.status !== 200) {
+      let detail = '';
+      try { detail = (await res.text()).slice(0, 180); } catch {}
+      throw new PolarError(`Minecraft refused the sign-in (${res.status}). ${detail || 'Sign in to your account again in the launcher.'}`.trim(), 401);
+    }
+    // Mojang can take a moment to see the join, so a 401 gets one more try. When Mojang won't answer the Polar server
+    // (it blocks some cloud servers), the server asks for the Minecraft token once to check it with Minecraft itself.
+    const verify = (extra = {}) => this.request('POST', '/v1/auth/verify', { body: { name: acc.name, challenge, ...extra } });
+    const attempt = async () => {
+      try {
+        return await verify();
+      } catch (e) {
+        if (e.code === 'mojang-unreachable') return verify({ mcToken: acc.mcToken });
+        throw e;
+      }
+    };
+    let v;
+    try {
+      v = await attempt();
+    } catch (e) {
+      if (e.status !== 401) throw e;
+      await new Promise((r) => setTimeout(r, 1500));
+      v = await attempt();
+    }
     const uuid = dashed(v.uuid);
     this.tokens.set(uuid, { token: v.token, expires: v.expires, name: v.name });
     return { token: v.token, uuid, name: v.name };

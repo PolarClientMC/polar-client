@@ -163,6 +163,12 @@ export default {
    "special": true
   },
   {
+   "id": "cape_hazesmp",
+   "name": "HazeSMP Cape",
+   "type": "cape",
+   "special": true
+  },
+  {
    "id": "wings_angel",
    "name": "Angel Wings",
    "type": "wings"
@@ -477,6 +483,12 @@ export default {
    "special": true
   },
   {
+   "id": "wings_hazesmp",
+   "name": "HazeSMP Wings",
+   "type": "wings",
+   "special": true
+  },
+  {
    "id": "head_halo",
    "name": "Golden Halo",
    "type": "head"
@@ -578,6 +590,12 @@ export default {
   {
    "id": "head_revon_crown",
    "name": "Revon's Crown",
+   "type": "head",
+   "special": true
+  },
+  {
+   "id": "head_hazesmp_crown",
+   "name": "HazeSMP Tide Crown",
    "type": "head",
    "special": true
   },
@@ -690,6 +708,12 @@ export default {
   {
    "id": "aura_revon_trail",
    "name": "Revon's Trail",
+   "type": "aura",
+   "special": true
+  },
+  {
+   "id": "aura_hazesmp_trail",
+   "name": "HazeSMP Trail",
    "type": "aura",
    "special": true
   }

@@ -208,14 +208,24 @@ test('news keeps well-formed items newest first and falls back to the saved or b
 
 // ---------------------------------------------------------------- Discord
 
-test('Discord activity: launcher, menus, singleplayer, a server, and a hidden server', () => {
+test('Discord activity: launcher, menus, singleplayer, partner and private servers, and a hidden server', () => {
   assert.deepEqual(activityFor({ version: '1.21.11', game: null }).details, 'In the launcher');
   const startedAt = Date.UTC(2026, 10, 2, 12);
-  const on = (where) => activityFor({ version: '1.8.9', game: { version: '1.21.11', startedAt, where } });
-  assert.equal(on({ state: 'server', server: 'play.example.net' }).state, 'On play.example.net');
-  assert.equal(on({ state: 'server', server: 'play.example.net' }).details, 'Minecraft 1.21.11');
-  assert.equal(on({ state: 'server', server: 'play.example.net' }).timestamps.start, startedAt / 1000);
-  assert.equal(on({ state: 'server' }).state, 'Multiplayer');
+  const on = (where, partner = null) => activityFor({ version: '1.8.9', game: { version: '1.21.11', startedAt, where }, partner });
+  // other servers stay private: no address, just the version
+  const priv = on({ state: 'server', server: 'play.example.net' });
+  assert.equal(priv.details, 'Playing a private server');
+  assert.equal(priv.state, 'Minecraft 1.21.11');
+  assert.match(priv.assets.large_image, /^https:\/\/raw\.githubusercontent\.com\/.*discord-private-server\.png$/);
+  assert.equal(priv.timestamps.start, startedAt / 1000);
+  assert.ok(!JSON.stringify(priv).includes('example.net'), "a private server's address is never shown");
+  assert.equal(on({ state: 'server' }).details, 'Playing a private server');
+  // partner servers are shown with their address and icon
+  const p = on({ state: 'server', server: 'play.hazesmp.net' }, { name: 'HazeSMP', ip: 'play.hazesmp.net', logo: 'https://example.com/haze.png' });
+  assert.equal(p.details, 'Playing on a partnered server');
+  assert.equal(p.state, 'play.hazesmp.net');
+  assert.equal(p.assets.large_image, 'https://example.com/haze.png');
+  assert.equal(p.assets.large_text, 'HazeSMP');
   assert.equal(on({ state: 'singleplayer' }).state, 'Singleplayer');
   assert.equal(on({ state: 'menu' }).state, 'In the menus');
   assert.equal(on({ state: 'hidden' }).state, undefined);

@@ -1,0 +1,31 @@
+# Polar Client plugin config
+
+# The Polar server that confirms who really plays with Polar Client. Leave as it is.
+polar-api: "https://polar-client.polarclientminecraft.workers.dev"
+
+# Your server's address as players type it to join (for example "play.hazesmp.net").
+# When set, a player must be connected to this server in Polar Client to claim.
+# Subdomains count too: "hazesmp.net" also accepts "play.hazesmp.net". Leave empty to skip this check.
+server-address: ""
+
+# Message when a Polar Client player claims the reward.
+claimed-message: "&b&lPolar Client &7> &aYou claimed &e1M coins&a!"
+
+# Message while the plugin checks with Polar.
+checking-message: "&b&lPolar Client &7> &7Checking with Polar..."
+
+# Message when the player is not playing with Polar Client.
+not-using-message: "&b&lPolar Client &7> &cPlay with Polar Client to claim this. Get it at &fhttps://discord.gg/3HxaywjbT4"
+
+# Message when they already claimed.
+already-claimed-message: "&b&lPolar Client &7> &eYou already claimed this reward."
+
+# Message when Polar can't be reached right now.
+unavailable-message: "&b&lPolar Client &7> &cCouldn't reach Polar right now. Try again in a minute."
+
+# Console commands run when a player claims. Use %player% for the player's name.
+rewards:
+  - "eco give %player% 1000000"
+
+# If true, each player can only claim once.
+one-time: true

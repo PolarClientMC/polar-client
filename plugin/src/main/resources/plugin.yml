@@ -1,0 +1,17 @@
+name: PolarClient
+version: '${version}'
+main: dev.polarclient.plugin.PolarPlugin
+api-version: '1.21'
+author: Polar Client
+description: Rewards players who play with Polar Client.
+
+commands:
+  polarclient:
+    description: Claim your Polar Client reward.
+    usage: /polarclient
+    aliases: [polar]
+
+permissions:
+  polarclient.admin:
+    description: Reload the Polar Client plugin's config.
+    default: op

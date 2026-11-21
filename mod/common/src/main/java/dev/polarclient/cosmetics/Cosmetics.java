@@ -34,7 +34,8 @@ import java.util.concurrent.Executors;
  */
 public final class Cosmetics {
 	private static final long STATE_EVERY = 30000, LOOKUP_EVERY = 1000, LOOK_TTL = 60000, EVENTS_EVERY = 3000, FORGET_AFTER = 5000;
-	private static final int CAPE_W = 256, CAPE_H = 128;
+	private static final int CAPE_W = 256, CAPE_H = 128; // HD capes: 4x the vanilla 64 x 32
+	private static final int CAPE_HD_W = 512, CAPE_HD_H = 256; // a cape's textureHD: 8x
 	private static final ExecutorService IO = Executors.newSingleThreadExecutor(r -> {
 		Thread t = new Thread(r, "Polar Cosmetics");
 		t.setDaemon(true);
@@ -55,7 +56,7 @@ public final class Cosmetics {
 
 	/** A catalogue entry, as far as the game needs it. */
 	static final class Item {
-		String id, type, model, texture;
+		String id, type, model, texture, textureHD;
 		int frames = 1, frameTime = 100, defaultColor = 0xFFFFFFFF;
 		JsonObject particles;
 	}
@@ -82,6 +83,9 @@ public final class Cosmetics {
 		final Aura aura = new Aura();
 		final Aura trail = new Aura();
 		final CosmeticModel.Motion motion = new CosmeticModel.Motion();
+		/** Keyframe playback and springs per slot, for models that have them. */
+		final Map<String, Keyframes.Rig> rigs = new HashMap<>();
+		final CosmeticModel.Motion keyedMotion = new CosmeticModel.Motion();
 		String auraId, trailId;
 		long head, body, auraAt, trailAt, seen;
 		/** The wings' pose, eased towards what the player is doing (0..1 each), and how fast the body turns. */
@@ -185,6 +189,7 @@ public final class Cosmetics {
 				it.type = str(j, "type");
 				it.model = j.has("model") ? str(j, "model") : null;
 				it.texture = j.has("texture") ? str(j, "texture") : null;
+				it.textureHD = j.has("textureHD") ? str(j, "textureHD") : null;
 				it.frames = j.has("frames") ? j.get("frames").getAsInt() : 1;
 				it.frameTime = j.has("frameTime") ? j.get("frameTime").getAsInt() : 100;
 				if (j.has("defaultColor")) it.defaultColor = parseColor(str(j, "defaultColor"));
@@ -246,9 +251,20 @@ public final class Cosmetics {
 			if ("cape".equals(it.type)) {
 				a.frames = Math.max(1, it.frames);
 				a.frameTime = Math.max(16, it.frameTime);
-				a.w = CAPE_W;
-				a.h = CAPE_H;
-				a.pixels = frames(LauncherBridge.polarFile(it.texture, 30000), a.frames, a.w, a.h);
+				if (it.textureHD != null) {
+					try { // the 8x texture where there is one, else (or if it fails) the 4x one
+						a.pixels = frames(LauncherBridge.polarFile(it.textureHD, 30000), a.frames, CAPE_HD_W, CAPE_HD_H);
+						a.w = CAPE_HD_W;
+						a.h = CAPE_HD_H;
+					} catch (Exception e) {
+						a.pixels = null;
+					}
+				}
+				if (a.pixels == null) {
+					a.w = CAPE_W;
+					a.h = CAPE_H;
+					a.pixels = frames(LauncherBridge.polarFile(it.texture, 30000), a.frames, a.w, a.h);
+				}
 			} else if ("aura".equals(it.type)) {
 				a.aura = new Aura.Settings(it.particles);
 				BufferedImage img = image(LauncherBridge.polarFile(str(it.particles, "texture"), 30000));
@@ -445,7 +461,27 @@ public final class Cosmetics {
 				if (pose.flying || pose.gliding) slotMoving = 1;
 				if (pose.distanceSq > STILL_BEYOND * STILL_BEYOND) slotDt = 0;
 			}
-			a.model.emit(fx.phases, slotDt, slotMoving, now, c == null ? 0xFFFFFFFF : c, base, glow, motion);
+			Map<String, float[]> keyed = null;
+			if (a.model.rigged()) {
+				String id = l.items.get(slot);
+				Keyframes.Rig rig = fx.rigs.get(slot);
+				if (rig == null || !id.equals(rig.item)) {
+					fx.rigs.put(slot, rig = new Keyframes.Rig());
+					rig.item = id;
+				}
+				PolarCosmeticsModule mod = module();
+				boolean hold = pose.distanceSq > STILL_BEYOND * STILL_BEYOND || (wings && mod != null && !mod.animateWings());
+				keyed = new HashMap<>();
+				Keyframes.play(a.model.clips, a.model.springs, rig, pose, hold ? 0 : dt, keyed);
+				if (wings && !a.model.clips.isEmpty()) {
+					// the clips already fold, glide and fly: keep only the size (and the turn lag, if nothing swings)
+					CosmeticModel.Motion km = fx.keyedMotion;
+					km.scale = motion.scale;
+					km.lag = a.model.springs.isEmpty() ? motion.lag : 0;
+					motion = km;
+				}
+			}
+			a.model.emit(fx.phases, slotDt, slotMoving, now, c == null ? 0xFFFFFFFF : c, base, glow, motion, keyed);
 			out.add(base);
 			if (glow != null && glow.count > 0) out.add(glow);
 		}
@@ -539,9 +575,7 @@ public final class Cosmetics {
 		float dt = fx.trailAt == 0 ? 0 : Math.min(0.1f, (now - fx.trailAt) / 1e9f);
 		fx.trailAt = now;
 		fx.trail.step(a.trail, dt, x, y, z);
-		RenderBatch b = new RenderBatch(a.trailTexture, a.trail.glow ? RenderBatch.GLOW : RenderBatch.TRANSLUCENT_BOTH);
-		fx.trail.emit(a.trail, x, y, z, camYaw, camPitch, b);
-		return b.count == 0 ? Collections.<RenderBatch>emptyList() : Collections.singletonList(b);
+		return batches(fx.trail, a.trail, a.trailTexture, x, y, z, camYaw, camPitch);
 	}
 
 	private static List<RenderBatch> auraOnly(Look l, UUID uuid, double x, double y, double z, float camYaw, float camPitch) {
@@ -559,9 +593,18 @@ public final class Cosmetics {
 		float dt = fx.auraAt == 0 ? 0 : Math.min(0.1f, (now - fx.auraAt) / 1e9f);
 		fx.auraAt = now;
 		fx.aura.step(a.aura, dt, x, y, z);
-		RenderBatch b = new RenderBatch(tex, a.aura.glow ? RenderBatch.GLOW : RenderBatch.TRANSLUCENT_BOTH);
-		fx.aura.emit(a.aura, x, y, z, camYaw, camPitch, b);
-		return b.count == 0 ? Collections.<RenderBatch>emptyList() : Collections.singletonList(b);
+		return batches(fx.aura, a.aura, tex, x, y, z, camYaw, camPitch);
+	}
+
+	/** An aura's sprites: one batch for its glowing layers, one for the rest. */
+	private static List<RenderBatch> batches(Aura aura, Aura.Settings s, Object tex, double x, double y, double z, float camYaw, float camPitch) {
+		RenderBatch glow = s.any(true) ? new RenderBatch(tex, RenderBatch.GLOW) : null;
+		RenderBatch other = s.any(false) ? new RenderBatch(tex, RenderBatch.TRANSLUCENT_BOTH) : null;
+		aura.emit(s, x, y, z, camYaw, camPitch, glow, other);
+		List<RenderBatch> out = new ArrayList<>(2);
+		if (other != null && other.count > 0) out.add(other);
+		if (glow != null && glow.count > 0) out.add(glow);
+		return out;
 	}
 
 	private static Fx fx(UUID uuid) {

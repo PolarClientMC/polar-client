@@ -1,6 +1,15 @@
 {
   "items": [
     {
+      "id": "release-1.0.19",
+      "date": "2026-11-22",
+      "tag": "Update",
+      "title": "Polar Client 1.0.19",
+      "body": "HazeSMP collection: a partner cape (animated, HD, with its own elytra), wings with real flapping and gliding physics, an underwater trail with ripples, bubbles and fish, and an Atlantis crown. Smoother cosmetics: wings and other pieces now move with springs, settle naturally and glide with your elytra. Trails can now have layers, ground ripples and animated sprites. HD capes look sharper up close. Discord status: shows when you're on a partnered server; other servers show as a private server, so their address stays hidden. Premium accounts sign in to Polar more reliably, so your cosmetics and friends load every time. Your coins still show when the Polar server can't be reached. More Minecraft versions in the launcher: 1.21.8, 1.21.5, 1.21.4, 1.21.1, 1.20.6, 1.20.4, 1.20.2, 1.20.1, 1.19.4, 1.19.2, 1.18.2, 1.17.1 and 1.12.2, with the performance pack.",
+      "link": "https://github.com/PolarClientMC/polar-client/releases/tag/v1.0.19",
+      "linkLabel": "Release notes"
+    },
+    {
       "id": "release-1.0.17",
       "date": "2026-11-21",
       "tag": "Update",

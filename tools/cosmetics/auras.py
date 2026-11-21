@@ -6,6 +6,12 @@ the player's centre), height (spawn height above the feet), vx/vy/vz (blocks per
 swirl (radians per second around the player), gravity (blocks/s^2, positive pulls down), shrink (true: shrink as
 they age), glow (true: additive and full-bright), upright (true: sprites keep pointing up instead of starting at a
 random angle, for flames), colors (picked at random).
+
+More (older Polar versions ignore them): layers (a list of emitters, each starting from the aura's own settings),
+frame ([first, count] of the strip this layer uses), anim (play those frames in order over the life), perBlock
+(particles per block walked, while on the ground: a trail), flat (lying on the ground), grow (end size, times the
+start), fade ([in, out] shares of the life), alpha (0..1), wobble ([blocks, per second] side to side), face (mirror
+to face the way it moves). hazetrail.py uses them all.
 """
 import math
 

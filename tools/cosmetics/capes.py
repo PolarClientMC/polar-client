@@ -869,11 +869,19 @@ def creator(W, H, f, N):
 
 def build(out, item):
     frames = item.get('frames', 1)
-    ely = item.get('elytra')
-    tex = cape_texture(lambda W, H, f: item['paint'](W, H, f, frames), frames=frames, edge=item.get('edge'),
-                       elytra=(lambda W, H, f: ely(W, H, f, frames)) if ely else None)
-    save_png(tex, f"{out}/textures/{item['id']}.png")
-    return {'texture': f"textures/{item['id']}.png", 'frames': frames, 'frameTime': item.get('frameTime', 100)}
+    ely, back = item.get('elytra'), item.get('back')
+
+    def tex(scale=None):
+        return cape_texture(lambda W, H, f: item['paint'](W, H, f, frames), frames=frames, edge=item.get('edge'),
+                            back=(lambda W, H, f: back(W, H, f, frames)) if back else None,
+                            elytra=(lambda W, H, f: ely(W, H, f, frames)) if ely else None, scale=scale)
+    save_png(tex(), f"{out}/textures/{item['id']}.png")
+    entry = {'texture': f"textures/{item['id']}.png", 'frames': frames, 'frameTime': item.get('frameTime', 100)}
+    if item.get('hd'):
+        # an HD cape: 8 texels per pixel (512 x 256 a frame) for Polar versions that read textureHD, the 4x one for the rest
+        save_png(tex(8), f"{out}/textures/{item['id']}_hd.png")
+        entry['textureHD'] = f"textures/{item['id']}_hd.png"
+    return entry
 
 
 def _c(id, name, collection, rarity, paint, description, frames=1, frameTime=100, edge=None, **kw):

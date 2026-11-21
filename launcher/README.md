@@ -1,6 +1,6 @@
 # Polar Client — Launcher
 
-Electron launcher: Microsoft sign-in, Mojang's Java runtimes, Minecraft 26.3, 1.21.11, 1.21.10, 1.16.5 (Fabric) and 1.8.9 (Legacy Fabric), the Polar Client mod built for each, and a performance pack from Modrinth.
+Electron launcher: Microsoft sign-in, Mojang's Java runtimes, Minecraft 26.3, 1.21.11, 1.21.10, 1.16.5 (Fabric) and 1.8.9 (Legacy Fabric), the Polar Client mod built for each, and a performance pack from Modrinth. 1.21.8 to 1.17.1 and 1.12.2 are offered too, with the performance pack only (no Polar mod yet).
 
 ```bash
 npm install

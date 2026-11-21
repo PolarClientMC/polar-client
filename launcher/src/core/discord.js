@@ -152,14 +152,37 @@ class DiscordPresence {
 /**
  * The activity for the launcher's state. Discord shows the application's name ("Playing Polar Client") above these
  * two lines. game: null in the launcher, else { version, startedAt, where } where `where` comes from the mod:
- * { state: 'menu' | 'singleplayer' | 'server' | 'hidden', server? }. Versions without the mod send nothing.
+ * { state: 'menu' | 'singleplayer' | 'server' | 'hidden', server? }. partner: matched partnered server, or null.
  */
-function activityFor({ version, game }) {
-  const assets = { large_image: 'logo', large_text: 'Polar Client' };
-  if (!game) return { details: 'In the launcher', state: `Minecraft ${version}`, assets };
+// an https image works without uploading it to the Discord app (like the partners' logos)
+const PRIVATE_SERVER_IMAGE = 'https://raw.githubusercontent.com/PolarClientMC/polar-client/main/branding/discord-private-server.png';
+
+function activityFor({ version, game, partner }) {
+  const baseAssets = { large_image: 'logo', large_text: 'Polar Client' };
+  if (!game) return { details: 'In the launcher', state: `Minecraft ${version}`, assets: baseAssets };
+
   const w = game.where || {};
-  const STATES = { menu: 'In the menus', singleplayer: 'Singleplayer', server: w.server ? `On ${w.server}` : 'Multiplayer' };
-  const activity = { details: `Minecraft ${game.version}`, timestamps: { start: Math.floor((game.startedAt || Date.now()) / 1000) }, assets };
+  const started = { start: Math.floor((game.startedAt || Date.now()) / 1000) };
+
+  if (w.state === 'server') {
+    if (partner) {
+      return {
+        details: 'Playing on a partnered server',
+        state: partner.ip || w.server || 'Partnered server',
+        timestamps: started,
+        assets: { large_image: partner.logo || 'logo', large_text: partner.name || 'Polar Client' }, // the partner's https logo
+      };
+    }
+    return {
+      details: 'Playing a private server',
+      state: `Minecraft ${game.version}`,
+      timestamps: started,
+      assets: { large_image: PRIVATE_SERVER_IMAGE, large_text: 'Private server' },
+    };
+  }
+
+  const STATES = { menu: 'In the menus', singleplayer: 'Singleplayer' };
+  const activity = { details: `Minecraft ${game.version}`, timestamps: started, assets: baseAssets };
   if (STATES[w.state]) activity.state = STATES[w.state];
   return activity;
 }

@@ -225,8 +225,8 @@ def _call(painter, face, w, h, frame):
 class Model:
     """A cosmetic model: bones of boxes, painted into one texture (an animated strip when frames > 1)."""
 
-    def __init__(self, anchor, bones, density=4, anims=(), frames=1, frame_time=100, translucent=False):
-        self.anchor, self.bones, self.density = anchor, list(bones), density
+    def __init__(self, anchor, bones, density=4, anims=(), frames=1, frame_time=100, translucent=False, tight=False):
+        self.anchor, self.bones, self.density, self.tight = anchor, list(bones), density, tight
         self.anims, self.frames, self.frame_time, self.translucent = list(anims), frames, frame_time, translucent
 
     def build(self, out_dir, name):
@@ -241,20 +241,28 @@ class Model:
         # shelf packing with a 1-texel border (repeated edge colours stop seams from showing)
         rects.sort(key=lambda r: -r[3])
         area = sum((w + 2) * (h + 2) for _, _, w, h in rects)
+
+        def pack(width):
+            x = y = shelf = 0
+            place = {}
+            for cube, face, w, h in rects:
+                if x + w + 2 > width:
+                    x, y, shelf = 0, y + shelf, 0
+                place[(id(cube), face)] = (x + 1, y + 1, w, h)
+                x += w + 2
+                shelf = max(shelf, h + 2)
+            height = 1
+            while height < y + shelf:
+                height *= 2
+            return width, height, place
         width = 64
         while width * width < area * 1.3 or width < max(w + 2 for _, _, w, _ in rects):
             width *= 2
-        x = y = shelf = 0
-        place = {}
-        for cube, face, w, h in rects:
-            if x + w + 2 > width:
-                x, y, shelf = 0, y + shelf, 0
-            place[(id(cube), face)] = (x + 1, y + 1, w, h)
-            x += w + 2
-            shelf = max(shelf, h + 2)
-        height = 1
-        while height < y + shelf:
-            height *= 2
+        if self.tight:   # the smallest texture of the sizes that fit (animated strips get tall otherwise)
+            widest = max(w + 2 for _, _, w, _ in rects)
+            width, height, place = min((pack(wd) for wd in (64, 128, 256, 512, 1024) if wd >= widest), key=lambda p: (p[0] * p[1], p[0]))
+        else:
+            width, height, place = pack(width)
         tex = np.zeros((height * self.frames, width, 4), np.float32)
         glow = np.zeros_like(tex)
         has_glow = False
@@ -327,12 +335,12 @@ def _blit_padded(dst, x, y, img):
 CAPE_SCALE = 4  # HD capes: 4 texels per pixel (256 x 128, a 4x vanilla cape)
 
 
-def cape_texture(front, back=None, edge=None, frames=1, elytra=None):
+def cape_texture(front, back=None, edge=None, frames=1, elytra=None, scale=None):
     """Builds an HD cape strip. front(W, H, frame) paints the outside (what people see from behind, 10x16 px);
     back(W, H, frame) the lining (defaults to a darker front); edge: '#rrggbb' for the sides.
     elytra(W, H, frame) paints the elytra wing (10x20 px, may be transparent outside its shape); by default the
-    elytra reuses the cape's outside."""
-    S = CAPE_SCALE
+    elytra reuses the cape's outside. scale: texels per pixel (CAPE_SCALE by default; 8 for an HD cape's textureHD)."""
+    S = scale or CAPE_SCALE
     W, H = 64 * S, 32 * S
     strip = np.zeros((H * frames, W, 4), np.float32)
     for f in range(frames):
@@ -357,14 +365,16 @@ def cape_texture(front, back=None, edge=None, frames=1, elytra=None):
         else:
             ely = np.asarray(Image.fromarray(to_u8(out)).resize((10 * S, 20 * S), Image.BILINEAR), np.float32) / 255
         strip[oy + 2 * S:oy + 22 * S, 36 * S:46 * S] = ely
-        rim = rgba(np.broadcast_to(side_col, (20 * S, 2 * S, 3)).copy())
-        rim[..., 3] = np.repeat(ely[:, :1, 3], 2 * S, 1) if elytra else 1
-        strip[oy + 2 * S:oy + 22 * S, 34 * S:36 * S] = rim
-        strip[oy + 2 * S:oy + 22 * S, 22 * S:24 * S] = rim
-        cap = rgba(np.broadcast_to(side_col, (2 * S, 10 * S, 3)).copy())
-        cap[..., 3] = np.repeat(ely[:1, :, 3], 2 * S, 0) if elytra else 1
-        strip[oy:oy + 2 * S, 24 * S:34 * S] = cap
-        strip[oy:oy + 2 * S, 34 * S:44 * S] = cap
+        # each side face is only there where the wing reaches that edge: the outer side (next to the outside face's
+        # left edge) follows its first column, the inner side its last, the top its first row and the bottom its last
+        def side(alpha, shape, axis):
+            f = rgba(np.broadcast_to(side_col, shape + (3,)).copy())
+            f[..., 3] = np.repeat(alpha, 2 * S, axis) if elytra else 1
+            return f
+        strip[oy + 2 * S:oy + 22 * S, 34 * S:36 * S] = side(ely[:, :1, 3], (20 * S, 2 * S), 1)
+        strip[oy + 2 * S:oy + 22 * S, 22 * S:24 * S] = side(ely[:, -1:, 3], (20 * S, 2 * S), 1)
+        strip[oy:oy + 2 * S, 24 * S:34 * S] = side(ely[:1, :, 3], (2 * S, 10 * S), 0)
+        strip[oy:oy + 2 * S, 34 * S:44 * S] = side(ely[-1:, :, 3], (2 * S, 10 * S), 0)
     return strip
 
 

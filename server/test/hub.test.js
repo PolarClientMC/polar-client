@@ -27,8 +27,15 @@ const dash = (h) => `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.s
 function fakeMojang() {
   const joined = new Set();
   const accounts = [ALICE, BOB, { id: '99990000999900009999000099990000', name: 'Carol' }];
-  globalThis.fetch = async (url) => {
+  const state = { blocked: false, tokens: { 'mc-token-alice-0123456789': ALICE, 'mc-token-bob-01234567890': BOB } };
+  globalThis.fetch = async (url, opts = {}) => {
     const u = new URL(String(url));
+    if (u.hostname === 'sessionserver.mojang.com' && state.blocked) return new Response('Forbidden', { status: 403 });
+    if (u.hostname === 'api.minecraftservices.com' && u.pathname === '/minecraft/profile') {
+      const auth = (opts.headers && (opts.headers.Authorization || opts.headers.authorization)) || '';
+      const acc = state.tokens[auth.replace(/^Bearer /, '')];
+      return acc ? new Response(JSON.stringify({ id: acc.id, name: acc.name, skins: [] }), { status: 200 }) : new Response('{}', { status: 401 });
+    }
     if (u.hostname === 'sessionserver.mojang.com') {
       const key = `${u.searchParams.get('username')}:${u.searchParams.get('serverId')}`;
       const acc = accounts.find((a) => a.name === u.searchParams.get('username'));
@@ -41,7 +48,7 @@ function fakeMojang() {
     }
     return new Response('nope', { status: 404 });
   };
-  return { join: (name, serverId) => joined.add(`${name}:${serverId}`) };
+  return { join: (name, serverId) => joined.add(`${name}:${serverId}`), block: (b = true) => { state.blocked = b; } };
 }
 
 function setup(env = {}) {
@@ -80,8 +87,9 @@ test('sign-in: Mojang confirms the challenge once; tokens are checked', async ()
   assert.match(ch.data.challenge, /^[0-9a-f]{32}$/);
   // without joining, Mojang says no
   assert.equal((await call('POST', '/v1/auth/verify', { body: { name: 'Alice', challenge: ch.data.challenge } })).status, 401);
-  // and the challenge is spent
+  // a "no" doesn't spend the challenge (Mojang can be a moment late), but a "yes" does
   mojang.join('Alice', ch.data.challenge);
+  assert.equal((await call('POST', '/v1/auth/verify', { body: { name: 'Alice', challenge: ch.data.challenge } })).status, 200);
   assert.equal((await call('POST', '/v1/auth/verify', { body: { name: 'Alice', challenge: ch.data.challenge } })).status, 401);
   const token = await signIn(call, mojang, ALICE);
   const me = await call('GET', '/v1/me', { token });
@@ -96,6 +104,35 @@ test('sign-in: Mojang confirms the challenge once; tokens are checked', async ()
   assert.equal((await call('GET', '/v1/me', { token: `${b}.x${s}` })).status, 401);
   assert.equal((await call('GET', '/v1/me')).status, 401);
   assert.equal((await call('POST', '/v1/auth/verify', { body: { name: 'bad name!', challenge: 'x' } })).status, 400);
+});
+
+test('sign-in when Mojang blocks the server: the launcher\'s word is never trusted, the Minecraft token is checked', async () => {
+  const mojang = fakeMojang();
+  const { call } = setup();
+  mojang.block();
+  const ch = await call('POST', '/v1/auth/challenge');
+  mojang.join('Alice', ch.data.challenge);
+  // a launcher claiming to be Alice, with a made-up profile, gets nothing
+  let r = await call('POST', '/v1/auth/verify', { body: { name: 'Alice', challenge: ch.data.challenge, profile: { id: ALICE.id, name: 'Alice' } } });
+  assert.equal(r.status, 503);
+  assert.equal(r.data.code, 'mojang-unreachable');
+  // someone else's token can't sign in as Alice
+  r = await call('POST', '/v1/auth/verify', { body: { name: 'Alice', challenge: ch.data.challenge, mcToken: 'mc-token-bob-01234567890' } });
+  assert.equal(r.status, 401);
+  // a made-up token is refused
+  r = await call('POST', '/v1/auth/verify', { body: { name: 'Alice', challenge: ch.data.challenge, mcToken: 'not-a-real-token-at-all' } });
+  assert.equal(r.status, 401);
+  // Alice's own token works, once
+  r = await call('POST', '/v1/auth/verify', { body: { name: 'Alice', challenge: ch.data.challenge, mcToken: 'mc-token-alice-0123456789' } });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.uuid, dash(ALICE.id));
+  r = await call('POST', '/v1/auth/verify', { body: { name: 'Alice', challenge: ch.data.challenge, mcToken: 'mc-token-alice-0123456789' } });
+  assert.equal(r.status, 401);
+  // with Mojang answering again, a profile sent by the launcher is still ignored
+  mojang.block(false);
+  const ch2 = await call('POST', '/v1/auth/challenge');
+  r = await call('POST', '/v1/auth/verify', { body: { name: 'Alice', challenge: ch2.data.challenge, profile: { id: ALICE.id, name: 'Alice' } } });
+  assert.equal(r.status, 401);
 });
 
 test('a server without its secret says so instead of handing out tokens', async () => {
@@ -423,4 +460,28 @@ test('partners added in the admin panel are listed for every launcher', async ()
   assert.deepEqual(pub.data.partners.map((p) => [p.id, p.ip, p.logo, p.tags.join(',')]), [['hazesmp', 'play.hazesmp.net', '', 'SMP,Economy']]);
   await call('POST', '/v1/admin/partners/delete', { admin: 'admin-pass-123456', body: { id: 'hazesmp' } });
   assert.equal((await call('GET', '/v1/partners')).data.partners.length, 0);
+});
+
+test('servers can ask whether a player is in game with Polar on their server, and learn nothing else', async () => {
+  const mojang = fakeMojang();
+  const { ctx, hub, call } = setup();
+  const token = await signIn(call, mojang, ALICE);
+  const ask = (q) => call('GET', `/v1/playing?${new URLSearchParams(q)}`);
+  assert.deepEqual((await ask({ uuid: ALICE.id })).data, { playing: false }, 'signed in but not connected');
+  await goOnline(hub, token);
+  const sock = ctx.sockets[ctx.sockets.length - 1];
+  hub.webSocketMessage(sock, JSON.stringify({ type: 'where', state: 'menu' }));
+  assert.deepEqual((await ask({ uuid: ALICE.id })).data, { playing: false }, 'in the menus is not on a server');
+  hub.webSocketMessage(sock, JSON.stringify({ type: 'where', state: 'server', server: 'mc.hazesmp.net:25565' }));
+  assert.deepEqual((await ask({ uuid: ALICE.id })).data, { playing: true });
+  assert.deepEqual((await ask({ uuid: dash(ALICE.id), host: 'hazesmp.net' })).data, { playing: true }, 'subdomains and ports count');
+  assert.deepEqual((await ask({ uuid: ALICE.id, host: 'mc.hazesmp.net' })).data, { playing: true });
+  assert.deepEqual((await ask({ uuid: ALICE.id, host: 'othersmp.net' })).data, { playing: false }, 'on another server');
+  assert.deepEqual((await ask({ uuid: ALICE.id, host: 'zesmp.net' })).data, { playing: false });
+  // cracked servers know players by name only (their UUID is name-based)
+  assert.deepEqual((await ask({ uuid: '00000000000000000000000000000001', name: 'alice', host: 'hazesmp.net' })).data, { playing: true });
+  assert.deepEqual((await ask({ name: 'Bob_2' })).data, { playing: false });
+  assert.deepEqual((await ask({})).data, { playing: false });
+  const r = await ask({ uuid: ALICE.id });
+  assert.deepEqual(Object.keys(r.data), ['playing'], 'only yes or no');
 });

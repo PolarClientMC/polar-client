@@ -14,6 +14,7 @@ import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
+import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -29,6 +30,7 @@ public class PolarMod implements ClientModInitializer {
 		Polar.init(new McPlatform());
 		Keys.register();
 		registerHud();
+		PayloadTypeRegistry.playC2S().register(PolarPresencePayload.TYPE, PolarPresencePayload.CODEC);
 
 		ClientTickEvents.END_CLIENT_TICK.register(mc -> Polar.tick());
 		ClientLifecycleEvents.CLIENT_STOPPING.register(mc -> Polar.saveConfig());

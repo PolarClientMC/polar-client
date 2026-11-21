@@ -235,13 +235,14 @@ test('natives jars unpack without META-INF and never outside the folder', async 
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test('catalog: the five versions, folders per version, servers copied into a new folder', async () => {
-  assert.deepEqual(catalog.VERSIONS.map((v) => v.id), ['26.3', '1.21.11', '1.21.10', '1.16.5', '1.8.9']);
+test('catalog: every version, folders per version, servers copied into a new folder', async () => {
+  assert.deepEqual(catalog.VERSIONS.map((v) => v.id), ['26.3', '1.21.11', '1.21.10', '1.21.8', '1.21.5', '1.21.4', '1.21.1', '1.20.6', '1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.19.2', '1.18.2', '1.17.1', '1.16.5', '1.12.2', '1.8.9']);
   assert.equal(catalog.versionInfo(undefined).id, '26.3');
-  assert.equal(catalog.versionInfo('1.12.2').id, '26.3');
+  assert.equal(catalog.versionInfo('1.7.10').id, '26.3');
+  assert.equal(catalog.versionInfo('1.12.2').loader, 'legacy-fabric');
   assert.equal(catalog.versionInfo('1.8.9').loader, 'legacy-fabric');
   assert.equal(catalog.versionInfo('1.8.9').loaderName, 'Legacy Fabric');
-  assert.equal(catalog.VERSIONS.filter((v) => v.polar).length, 5, 'Polar Client is built for every version');
+  assert.deepEqual(catalog.VERSIONS.filter((v) => v.polar).map((v) => v.id), ['26.3', '1.21.11', '1.21.10', '1.16.5', '1.8.9'], 'the versions Polar Client is built for');
   assert.equal(catalog.modJarName('1.8.9'), 'polarclient-1.8.9.jar');
   assert.equal(catalog.modJarName('nope'), 'polarclient-26.3.jar');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'polar-root-'));

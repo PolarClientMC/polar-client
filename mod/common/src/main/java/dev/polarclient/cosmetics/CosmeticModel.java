@@ -62,12 +62,19 @@ final class CosmeticModel {
 
 	/** Pivot (pixels, body space) the wings grow and shrink around: between the shoulder blades. */
 	private static final float SCALE_X = 0, SCALE_Y = 2.5f, SCALE_Z = 2.3f;
+	/** Where this model grows and shrinks around (the wing size setting): its own "scaleAbout", or the default. */
+	final float[] scaleAbout = {SCALE_X, SCALE_Y, SCALE_Z};
+	/** The sizes the wing size setting may draw it at (a model fitted to clear the player can pin it: [1, 1]). */
+	final float[] sizeRange = {0, 100};
 
 	final boolean head;
 	final int texW, texH, frames, frameTime;
 	final boolean glow, translucent;
 	final List<Bone> bones = new ArrayList<>();
 	final List<Anim> anims = new ArrayList<>();
+	/** Keyframe clips by state ("idle", "walk", ...) and springs (see {@link Keyframes}); empty for older models. */
+	final Map<String, Keyframes.Clip> clips;
+	final List<Keyframes.Spring> springs;
 
 	CosmeticModel(JsonObject o) {
 		head = "head".equals(str(o, "anchor"));
@@ -78,6 +85,11 @@ final class CosmeticModel {
 		frameTime = Math.max(16, num(o, "frameTime", 100));
 		glow = o.has("glow") && !o.get("glow").isJsonNull();
 		translucent = o.has("translucent") && o.get("translucent").getAsBoolean();
+		if (o.has("scaleAbout") && o.get("scaleAbout").isJsonArray()) vec(o, "scaleAbout", scaleAbout);
+		if (o.has("sizeRange") && o.get("sizeRange").isJsonArray() && o.getAsJsonArray("sizeRange").size() == 2) {
+			sizeRange[0] = o.getAsJsonArray("sizeRange").get(0).getAsFloat();
+			sizeRange[1] = o.getAsJsonArray("sizeRange").get(1).getAsFloat();
+		}
 		for (JsonElement b : o.getAsJsonArray("bones")) bones.add(bone(b.getAsJsonObject()));
 		if (o.has("anims")) {
 			for (JsonElement e : o.getAsJsonArray("anims")) {
@@ -98,6 +110,13 @@ final class CosmeticModel {
 				anims.add(an);
 			}
 		}
+		clips = Keyframes.clips(o.get("animations"));
+		springs = Keyframes.springs(o.get("physics"));
+	}
+
+	/** Whether this model moves by keyframes or springs (needs a per-player {@link Keyframes.Rig}). */
+	boolean rigged() {
+		return !clips.isEmpty() || !springs.isEmpty();
 	}
 
 	private static Bone bone(JsonObject o) {
@@ -136,10 +155,22 @@ final class CosmeticModel {
 	}
 
 	void emit(Map<String, Float> phases, float dt, float moving, long timeMs, int tint, RenderBatch base, RenderBatch glowBatch, Motion motion) {
+		emit(phases, dt, moving, timeMs, tint, base, glowBatch, motion, null);
+	}
+
+	/**
+	 * keyed: this frame's keyframe and spring pose by bone ({rx, ry, rz, px, py, pz, sx, sy, sz}, see
+	 * {@link Keyframes#play}), or null.
+	 */
+	void emit(Map<String, Float> phases, float dt, float moving, long timeMs, int tint, RenderBatch base, RenderBatch glowBatch, Motion motion,
+			Map<String, float[]> keyed) {
 		java.util.HashMap<String, float[]> pose = new java.util.HashMap<>();
+		if (keyed != null) {
+			for (Map.Entry<String, float[]> e : keyed.entrySet()) pose.put(e.getKey(), e.getValue().clone());
+		}
 		for (Anim a : anims) {
 			float[] v = pose.get(a.bone);
-			if (v == null) pose.put(a.bone, v = new float[6]);
+			if (v == null) pose.put(a.bone, v = Keyframes.base());
 			if ("spin".equals(a.type)) {
 				float t = (timeMs % 3600000L) / 1000f;
 				for (int i = 0; i < 3; i++) v[i] += a.rot[i] * t;
@@ -157,14 +188,15 @@ final class CosmeticModel {
 				v[3 + i] += a.pos[i] * s;
 			}
 		}
-		float[] root = motion.scale == 1 ? Mat4.identity() : Mat4.scaleAbout(motion.scale, SCALE_X / 16f, SCALE_Y / 16f, SCALE_Z / 16f);
+		float size = Math.max(sizeRange[0], Math.min(sizeRange[1], motion.scale));
+		float[] root = size == 1 ? Mat4.identity() : Mat4.scaleAbout(size, scaleAbout[0] / 16f, scaleAbout[1] / 16f, scaleAbout[2] / 16f);
 		boolean shaped = motion.fold != 0 || motion.glide != 0 || motion.lag != 0;
 		for (Bone b : bones) {
 			if (shaped) {
 				// fold back and droop, or open up and lift, mirrored for the right wing; trail the turn on both
 				float side = b.pivot[0] >= 0 ? 1 : -1;
 				float[] v = pose.get(b.name);
-				if (v == null) pose.put(b.name, v = new float[6]);
+				if (v == null) pose.put(b.name, v = Keyframes.base());
 				v[1] += side * (-38 * motion.fold + 14 * motion.glide) + motion.lag;
 				v[2] += side * (10 * motion.fold - 7 * motion.glide);
 			}
@@ -194,6 +226,7 @@ final class CosmeticModel {
 			pz += an[5];
 		}
 		float[] m = Mat4.part(parent, px, py, pz, rx * RAD, ry * RAD, rz * RAD);
+		if (an != null && (an[6] != 1 || an[7] != 1 || an[8] != 1)) m = Mat4.mul(m, Mat4.scale(an[6], an[7], an[8]));
 		float[] p = new float[12], n = new float[3];
 		for (Cube c : b.cubes) {
 			float g = c.inflate;

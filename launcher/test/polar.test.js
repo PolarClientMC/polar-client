@@ -44,6 +44,9 @@ function fakeNet() {
     if (u.pathname === '/v1/auth/challenge') return json({ challenge: 'c'.repeat(32) });
     if (u.pathname === '/v1/auth/verify') {
       const b = JSON.parse(init.body);
+      net.verifyBodies = [...(net.verifyBodies || []), b];
+      if (net.mojangBlocked && !b.mcToken) return json({ error: 'unreachable', code: 'mojang-unreachable' }, 503);
+      if (net.mojangBlocked && b.mcToken !== 'mc-token') return json({ error: 'no' }, 401);
       if (!net.joined.has(b.challenge)) return json({ error: 'no' }, 401);
       return json({ token: net.token, uuid: UUID, name: 'Frosty', expires: Date.now() + 30 * 864e5 });
     }
@@ -132,6 +135,19 @@ test('signs in through Mojang once and keeps the token', async () => {
   await svc.me();
   assert.ok(net.calls.includes('POST polar.example.workers.dev/v1/auth/verify'));
   assert.equal(saved.get(UUID).token, 'tok-2');
+});
+
+test('when Mojang blocks the Polar server, the Minecraft token goes along only on the second ask', async () => {
+  const net = fakeNet();
+  net.mojangBlocked = true;
+  const { svc, saved } = service(net);
+  const me = await svc.me();
+  assert.equal(me.name, 'Frosty');
+  assert.equal(net.verifyBodies.length, 2);
+  assert.equal(net.verifyBodies[0].mcToken, undefined, 'the first ask never carries the token');
+  assert.equal(net.verifyBodies[1].mcToken, 'mc-token');
+  assert.ok(!net.verifyBodies.some((b) => b.profile), 'the launcher never vouches for itself');
+  assert.equal(saved.get(UUID).token, 'tok-1');
 });
 
 test('offline profiles sign in with a key kept on this PC; the name stays theirs', async () => {

@@ -11,6 +11,10 @@ client-mod/out/
 client-mod/.idea/
 *.iml
 
+# the Polar Client server plugin (plugin/)
+plugin/.gradle/
+plugin/build/
+
 # launcher
 launcher/node_modules/
 launcher/dist/

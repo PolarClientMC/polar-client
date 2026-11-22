@@ -1,0 +1,19 @@
+package dev.polarclient.impl.mixin;
+
+import dev.polarclient.Polar;
+import net.minecraft.client.particle.Particle;
+import net.minecraft.client.particle.ParticleEngine;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+/** Particles: drops part of the new particles. */
+@Mixin(ParticleEngine.class)
+public abstract class ParticleEngineMixin {
+	@Inject(method = "add", at = @At("HEAD"), cancellable = true)
+	private void polar$fewerParticles(Particle particle, CallbackInfo ci) {
+		if (Polar.modules() == null) return;
+		if (Polar.modules().xpBottles.dropParticle() || Polar.modules().particles.isEnabled() && Polar.modules().particles.drop()) ci.cancel();
+	}
+}

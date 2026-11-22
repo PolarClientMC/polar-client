@@ -2102,7 +2102,7 @@ polar.on('game:exit', () => setTimeout(() => loadCoins(true), 1500));
 
 // ---------------------------------------------------------------- Polar: shared sign-in gate
 const RARITY = { common: 'Common', rare: 'Rare', epic: 'Epic', legendary: 'Legendary', mythic: 'Mythic' };
-const SLOT_NAMES = { cape: 'cape', wings: 'wings', head: 'hat', back: 'back item', aura: 'aura' };
+const SLOT_NAMES = { cape: 'cape', wings: 'wings', head: 'hat', back: 'back item', aura: 'aura', tags: 'name tag' };
 const TINTS = ['#ffffff', '#1f1f24', '#ff4f5e', '#ff9a2e', '#ffd23f', '#3fbf74', '#2fd3c1', '#4fa3ff', '#2f4fe6', '#9b5cff', '#ff6fb5', '#8a5a35'];
 
 /** Signs in to the Polar server when needed. Returns the state, or shows why it can't in the gate element. */
@@ -2206,7 +2206,7 @@ async function openWardrobe(force) {
       const [catalog, me] = await Promise.all([polar.online.catalog(), polar.online.me()]);
       wr.catalog = catalog;
       wr.me = me;
-      wr.saved = { slots: me.loadout.slots || {}, hideBadge: Boolean(me.loadout.hideBadge) };
+      wr.saved = { slots: me.loadout.slots || {}, hideBadge: Boolean(me.loadout.hideBadge), activeTag: String(me.loadout.activeTag || me.activeTag || '') };
       wr.draft = structuredClone(wr.saved);
       wr.loaded = true;
     } catch (e) {
@@ -2260,54 +2260,131 @@ function frameFor(slot) {
 }
 
 function renderWardrobe() {
-  const owned = new Set(wr.me.owned || []);
-  const items = wr.catalog.items.filter((i) => i.type === wr.slot);
-  const collections = (wr.catalog.collections || []).filter((c) => items.some((i) => i.collection === c.id));
-  if (wr.collection !== 'all' && !collections.some((c) => c.id === wr.collection)) wr.collection = 'all';
   document.querySelectorAll('#wrSlots button').forEach((b) => b.classList.toggle('active', b.dataset.slot === wr.slot));
-  $('wrCollections').replaceChildren(
-    h('button', { class: `chip${wr.collection === 'all' ? ' on' : ''}`, onclick: () => { wr.collection = 'all'; renderWardrobe(); } }, 'All'),
-    ...collections.map((c) => h('button', { class: `chip${wr.collection === c.id ? ' on' : ''}`, onclick: () => { wr.collection = c.id; renderWardrobe(); } }, c.name)));
-  const shown = items.filter((i) => wr.collection === 'all' || i.collection === wr.collection);
-  const worn = wr.draft.slots[wr.slot];
-  const none = h('button', { class: `wr-item none${worn ? '' : ' on'}`, onclick: () => equip(null) },
-    h('div', { class: 'wr-thumb' }, icon('i-close')), h('div', { class: 'wr-name', text: `No ${SLOT_NAMES[wr.slot]}` }));
-  $('wrGrid').replaceChildren(none, ...shown.map((it) => {
-    const locked = it.special && !owned.has(it.id);
-    return h('button', { class: `wr-item r-${it.rarity}${worn && worn.id === it.id ? ' on' : ''}${locked ? ' locked' : ''}`, title: it.description || it.name, onclick: () => equip(it) },
-      h('div', { class: 'wr-thumb' }, h('img', { src: cosmeticUrl(`thumbs/${it.id}.png`), alt: '', loading: 'lazy' }), locked ? h('span', { class: 'wr-lock' }, icon('i-lock')) : null),
-      h('div', { class: 'wr-name', text: it.name }),
-      h('div', { class: 'wr-rarity' }, it.special ? h('span', { class: 'wr-special', text: 'Special' }) : null, RARITY[it.rarity] || ''));
-  }));
-  // colour picker for tintable items
-  const wornItem = worn && itemById(worn.id);
-  $('wrTint').hidden = !(wornItem && wornItem.tint);
-  if (wornItem && wornItem.tint) {
-    const cur = (worn.color || wornItem.defaultColor || '#ffffff').toLowerCase();
-    const picker = h('input', { type: 'color', value: cur, title: 'Any colour' });
-    picker.addEventListener('input', () => setTint(picker.value));
-    $('wrTint').replaceChildren(h('span', { class: 'muted', text: `${wornItem.name} colour` }),
-      ...TINTS.map((c) => h('button', { class: `swatch${c === cur ? ' on' : ''}`, style: `background:${c}`, title: c, onclick: () => setTint(c) })), picker);
+  $('wrCollections').replaceChildren();
+  $('wrTint').hidden = true;
+  const tagsEl = $('wrTags'); if (tagsEl) { tagsEl.hidden = true; tagsEl.replaceChildren(); }
+
+  if (wr.slot === 'tags') {
+    renderWardrobeTagTab();
+  } else {
+    const owned = new Set(wr.me.owned || []);
+    const items = wr.catalog.items.filter((i) => i.type === wr.slot);
+    const collections = (wr.catalog.collections || []).filter((c) => items.some((i) => i.collection === c.id));
+    if (wr.collection !== 'all' && !collections.some((c) => c.id === wr.collection)) wr.collection = 'all';
+    $('wrCollections').replaceChildren(
+      h('button', { class: `chip${wr.collection === 'all' ? ' on' : ''}`, onclick: () => { wr.collection = 'all'; renderWardrobe(); } }, 'All'),
+      ...collections.map((c) => h('button', { class: `chip${wr.collection === c.id ? ' on' : ''}`, onclick: () => { wr.collection = c.id; renderWardrobe(); } }, c.name)));
+    const shown = items.filter((i) => wr.collection === 'all' || i.collection === wr.collection);
+    const worn = wr.draft.slots[wr.slot];
+    const none = h('button', { class: `wr-item none${worn ? '' : ' on'}`, onclick: () => equip(null) },
+      h('div', { class: 'wr-thumb' }, icon('i-close')), h('div', { class: 'wr-name', text: `No ${SLOT_NAMES[wr.slot]}` }));
+    $('wrGrid').replaceChildren(none, ...shown.map((it) => {
+      const cfg = ((wr.me && wr.me.cosmeticConfig) || {})[it.id] || { price: 0, codeOnly: Boolean(it.special) };
+      const codeOnly = Boolean(cfg.codeOnly || it.special);
+      const price = codeOnly ? 0 : Math.max(0, Number(cfg.price || 0));
+      const ownedItem = owned.has(it.id);
+      const locked = !ownedItem && (codeOnly || price > 0);
+      const tag = codeOnly ? h('span', { class: 'wr-special', text: 'Code-only' }) : (price > 0 && !ownedItem ? h('span', { class: 'wr-special', text: `${price} coins` }) : null);
+      return h('button', { class: `wr-item r-${it.rarity}${worn && worn.id === it.id ? ' on' : ''}${locked ? ' locked' : ''}`, title: it.description || it.name, onclick: () => equip(it) },
+        h('div', { class: 'wr-thumb' }, h('img', { src: cosmeticUrl(`thumbs/${it.id}.png`), alt: '', loading: 'lazy' }), locked ? h('span', { class: 'wr-lock' }, icon('i-lock')) : null),
+        h('div', { class: 'wr-name', text: it.name }),
+        h('div', { class: 'wr-rarity' }, tag, ' ', RARITY[it.rarity] || ''));
+    }));
+    const wornItem = worn && itemById(worn.id);
+    $('wrTint').hidden = !(wornItem && wornItem.tint);
+    if (wornItem && wornItem.tint) {
+      const cur = (worn.color || wornItem.defaultColor || '#ffffff').toLowerCase();
+      const picker = h('input', { type: 'color', value: cur, title: 'Any colour' });
+      picker.addEventListener('input', () => setTint(picker.value));
+      $('wrTint').replaceChildren(h('span', { class: 'muted', text: `${wornItem.name} colour` }),
+        ...TINTS.map((c) => h('button', { class: `swatch${c === cur ? ' on' : ''}`, style: `background:${c}`, title: c, onclick: () => setTint(c) })), picker);
+    }
   }
+
   $('wrBadge').checked = !wr.draft.hideBadge;
   const dirty = !sameLoadout(wr.draft, wr.saved);
   $('wrSave').disabled = !dirty;
   $('wrUndo').disabled = !dirty;
-  wr.viewer.set(frameFor(wr.slot));
-  wr.viewer.setLoadout(viewerLoadout());
+  if (wr.viewer) { wr.viewer.set(frameFor(wr.slot === 'tags' ? 'cape' : wr.slot)); wr.viewer.setLoadout(viewerLoadout()); }
+  renderWrNamePreview();
 }
 
-function equip(it) {
+function renderWardrobeTagTab() {
+  const all = Array.isArray(wr.me && wr.me.allTags) ? wr.me.allTags : [];
+  const granted = new Set(Array.isArray(wr.me && wr.me.tags) ? wr.me.tags : []);
+  const active = String(wr.draft.activeTag || '');
+  const none = h('button', { class: `wr-item none${active ? '' : ' on'}`, onclick: () => { wr.draft.activeTag = ''; renderWardrobe(); } },
+    h('div', { class: 'wr-thumb' }, icon('i-close')), h('div', { class: 'wr-name', text: 'No name tag' }));
+  $('wrGrid').replaceChildren(none, ...all.map((t) => {
+    const has = granted.has(t.id);
+    const on = active === t.id;
+    return h('button', {
+      class: `wr-item${on ? ' on' : ''}${has ? '' : ' locked'}`,
+      title: has ? `Use ${t.label} tag` : `${t.label} is code-only. Ask a Polar admin to grant it.`,
+      onclick: () => {
+        if (!has) { toast(`${t.label} is code-only. Ask a Polar admin to grant it.`, 'info'); return; }
+        wr.draft.activeTag = on ? '' : t.id;
+        renderWardrobe();
+      }
+    },
+      h('div', { class: 'wr-thumb', style: `font-size:28px;color:${t.color || '#fff'}` }, t.icon || '◆'),
+      h('div', { class: 'wr-name', text: t.label || t.id }),
+      h('div', { class: 'wr-rarity' }, has ? (on ? 'Selected' : 'Granted') : 'Code-only'));
+  }));
+}
+
+function renderWrNamePreview() {
+  const el = $('wrNamePreview');
+  if (!el) return;
+  const name = (wr.me && wr.me.name) || (state.activeProfile && state.activeProfile.name) || 'Player';
+  const showBadge = !wr.draft.hideBadge;
+  const tagId = String(wr.draft.activeTag || '');
+  const tag = (Array.isArray(wr.me && wr.me.allTags) ? wr.me.allTags : []).find((t) => t.id === tagId);
+  el.replaceChildren();
+  if (showBadge) el.appendChild(h('img', { src: 'assets/badge.png', alt: '', style: 'width:18px;height:18px;vertical-align:-3px;margin-right:6px;object-fit:contain;image-rendering:pixelated' }));
+  el.appendChild(h('span', { style: 'color:#fff', text: name }));
+  if (tag) el.appendChild(h('span', { style: `color:${tag.color || '#fff'};margin-left:8px`, text: tag.icon || '◆' }));
+}
+
+async function equip(it) {
   if (!it || (wr.draft.slots[wr.slot] && wr.draft.slots[wr.slot].id === it.id)) {
     delete wr.draft.slots[wr.slot];
-  } else {
-    if (it.special && !(wr.me.owned || []).includes(it.id)) {
-      toast(`${it.name} is a special cosmetic. You get it from the Polar team or with a code. Here's a preview.`, 'info', 6000);
+    renderWardrobe();
+    return;
+  }
+
+  const owned = new Set(wr.me.owned || []);
+  const cfg = ((wr.me && wr.me.cosmeticConfig) || {})[it.id] || { price: 0, codeOnly: Boolean(it.special) };
+  const codeOnly = Boolean(cfg.codeOnly || it.special);
+  const price = codeOnly ? 0 : Math.max(0, Number(cfg.price || 0));
+
+  if (!owned.has(it.id) && codeOnly) {
+    toast(`${it.name} is a code-only cosmetic. You can get it from the Polar team or with a code. Here's a preview.`, 'info', 6000);
+    wr.viewer.setLoadout({ ...viewerLoadout(), [wr.slot]: it });
+    return;
+  }
+
+  if (!owned.has(it.id) && price > 0) {
+    if (!confirm(`Buy ${it.name} for ${price} coins?`)) {
       wr.viewer.setLoadout({ ...viewerLoadout(), [wr.slot]: it });
       return;
     }
-    wr.draft.slots[wr.slot] = it.tint ? { id: it.id, color: it.defaultColor } : { id: it.id };
+    try {
+      const r = await polar.online.buyCosmetic(it.id);
+      wr.me.owned = r.owned || wr.me.owned || [];
+      if (typeof r.coins === 'number') {
+        const el = $('accountCoins');
+        if (el) { el.textContent = String(r.coins); el.hidden = false; }
+      }
+      toast(`Bought ${it.name} for ${price} coins.`, 'ok', 4000);
+    } catch (e) {
+      toast(e.message || 'Could not buy cosmetic.', 'err', 5000);
+      return;
+    }
   }
+
+  wr.draft.slots[wr.slot] = it.tint ? { id: it.id, color: it.defaultColor } : { id: it.id };
   renderWardrobe();
 }
 
@@ -2341,7 +2418,7 @@ $('wrSave').addEventListener('click', async () => {
   $('wrSave').disabled = true;
   try {
     const r = await polar.online.saveLoadout(wr.draft);
-    wr.saved = { slots: r.loadout.slots, hideBadge: r.loadout.hideBadge };
+    wr.saved = { slots: r.loadout.slots || {}, hideBadge: Boolean(r.loadout.hideBadge), activeTag: String(r.loadout.activeTag || '') };
     wr.draft = structuredClone(wr.saved);
     toast('Outfit saved. Polar players see it next time they spot you.', 'ok');
   } catch (e) {
@@ -2559,19 +2636,35 @@ function srvRenderPlayer() {
           toast(srvAdmin.player && srvAdmin.player.banned ? 'Player blocked.' : 'Player unblocked.', 'ok');
         } catch (e) { toast(e.message, 'error'); }
       } }, p.banned ? 'Unblock' : 'Block')));
+
+  const playerTags = new Set(p.tags || []);
+  const allTags = Array.isArray(p.allTags) ? p.allTags : [];
+  const tagsSection = h('div', { class: 'admin-users', style: 'margin-top:10px' },
+    h('div', { class: 'admin-user-meta', style: 'margin:0 0 8px;font-weight:600', text: 'Name tags (code-only, show on right side of name)' }),
+    ...allTags.map((t) => {
+      const has = playerTags.has(t.id);
+      return h('div', { class: 'admin-user-row' },
+        h('div', { class: 'admin-user-main' },
+          h('div', { class: 'admin-user-name' }, h('span', { style: 'color:' + (t.color || '#fff') + ';margin-right:8px', text: t.icon || '' }), ' ', (t.label || t.id)),
+          h('div', { class: 'admin-user-meta', text: t.id })),
+        h('div', { class: 'admin-user-actions' },
+          has
+            ? h('button', { class: 'btn danger small', type: 'button', onclick: async () => { try { srvAdmin.player = await srvCall('tags/revoke', { method: 'POST', body: { uuid: p.uuid, tag: t.id } }); srvRenderPlayer(); toast('Revoked ' + t.label + ' tag.'); } catch (e) { toast(e.message, 'error'); } } }, 'Revoke')
+            : h('button', { class: 'btn ghost small', type: 'button', onclick: async () => { try { srvAdmin.player = await srvCall('tags/grant', { method: 'POST', body: { uuid: p.uuid, tag: t.id } }); srvRenderPlayer(); toast('Granted ' + t.label + ' tag.', 'ok'); } catch (e) { toast(e.message, 'error'); } } }, 'Grant')));
+    }));
   const list = h('div', { class: 'admin-users', style: 'margin-top:10px;max-height:420px;overflow:auto' },
     ...items.map((it) => {
       const has = owned.has(it.id);
       return h('div', { class: 'admin-user-row' },
         h('div', { class: 'admin-user-main' },
           h('div', { class: 'admin-user-name', text: it.name || it.id }),
-          h('div', { class: 'admin-user-meta', text: `${it.type}${it.special ? ' · special' : ''} · ${it.id}` })),
+          h('div', { class: 'admin-user-meta', text: it.type + (it.special ? ' · special' : '') + ' · ' + it.id })),
         h('div', { class: 'admin-user-actions' },
           has
-            ? h('button', { class: 'btn danger small', type: 'button', onclick: async () => { try { srvAdmin.player = await srvCall('revoke', { method: 'POST', body: { uuid: p.uuid, item: it.id } }); srvRenderPlayer(); toast(`Revoked ${it.name || it.id}.`); } catch (e) { toast(e.message, 'error'); } } }, 'Revoke')
-            : h('button', { class: 'btn ghost small', type: 'button', onclick: async () => { try { srvAdmin.player = await srvCall('grant', { method: 'POST', body: { uuid: p.uuid, item: it.id } }); srvRenderPlayer(); toast(`Granted ${it.name || it.id}.`, 'ok'); } catch (e) { toast(e.message, 'error'); } } }, 'Grant')));
+            ? h('button', { class: 'btn danger small', type: 'button', onclick: async () => { try { srvAdmin.player = await srvCall('revoke', { method: 'POST', body: { uuid: p.uuid, item: it.id } }); srvRenderPlayer(); toast('Revoked ' + (it.name || it.id) + '.'); } catch (e) { toast(e.message, 'error'); } } }, 'Revoke')
+            : h('button', { class: 'btn ghost small', type: 'button', onclick: async () => { try { srvAdmin.player = await srvCall('grant', { method: 'POST', body: { uuid: p.uuid, item: it.id } }); srvRenderPlayer(); toast('Granted ' + (it.name || it.id) + '.', 'ok'); } catch (e) { toast(e.message, 'error'); } } }, 'Grant')));
     }));
-  wrap.replaceChildren(head, list);
+  wrap.replaceChildren(head, tagsSection, list);
 }
 
 async function loadSrvPlayer(q) {

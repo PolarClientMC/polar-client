@@ -862,6 +862,7 @@ handle('polar:me', () => polar.me());
 handle('polar:catalog', () => polar.catalog());
 handle('polar:saveLoadout', (loadout) => polar.saveLoadout(loadout));
 handle('polar:redeem', (code) => polar.redeem(code));
+handle('polar:buyCosmetic', (item) => polar.buyCosmetic(item));
 handle('polar:friends', () => polar.friends());
 handle('polar:addFriend', (name) => polar.addFriend(name));
 handle('polar:acceptFriend', (uuid) => polar.acceptFriend(uuid));

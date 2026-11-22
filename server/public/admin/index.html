@@ -130,6 +130,17 @@
     </section>
 
     <section>
+      <h2>Cosmetic prices</h2>
+      <p class="muted">Cosmetics are free for everyone until you give them a price here. Code-only cosmetics cannot be bought with coins (Haze and special cosmetics are always code-only). Priced cosmetics must be bought before they can be equipped.</p>
+      <div class="row">
+        <label style="flex:1">Filter<input id="cosmeticQ" placeholder="Search cosmetics"></label>
+        <button type="button" class="ghost" id="cosmeticReload">Reload</button>
+      </div>
+      <div class="msg" id="cosmeticMsg"></div>
+      <div class="scroll"><table id="cosmeticTable"></table></div>
+    </section>
+
+    <section>
       <h2>Codes</h2>
       <p class="muted">Codes hand out a cosmetic (usually a special one) to whoever redeems them in the launcher.</p>
       <form id="codeForm" class="row">
@@ -202,7 +213,7 @@ function itemOptions(select) {
   const special = catalog.items.filter((i) => i.special);
   const free = catalog.items.filter((i) => !i.special);
   const group = (label, items) => h('optgroup', { label }, items.map((i) => h('option', { value: i.id }, `${i.name} (${i.type})`)));
-  select.append(group('Special (only by grant or code)', special), group('Free for everyone', free));
+  select.append(group('Code-only / special', special), group('Buyable / free', free));
 }
 
 async function loadStats() {
@@ -275,6 +286,43 @@ function renderPartners(data) {
 async function loadPartners() {
   try { renderPartners(await api('GET', 'partners')); }
   catch (e) { say('partnerMsg', e.message, false); }
+}
+
+let cosmeticsAdmin = [];
+
+function renderCosmetics(list) {
+  const q = ($('cosmeticQ').value || '').trim().toLowerCase();
+  const items = (list || cosmeticsAdmin).filter((i) => !q || i.name.toLowerCase().includes(q) || i.id.toLowerCase().includes(q) || i.type.toLowerCase().includes(q));
+  const rows = items.map((i) => {
+    const priceInput = h('input', { type: 'number', min: 0, step: 1, value: Math.floor(Number(i.price || 0)), style: 'width:110px', ...(i.codeOnly ? { disabled: '' } : {}) });
+    const codeOnlyBox = h('input', { type: 'checkbox', ...(i.codeOnly ? { checked: '' } : {}), ...(i.catalogSpecial ? { disabled: '' } : {}) });
+    const save = async () => {
+      try {
+        const r = await api('POST', 'cosmetics/set', { item: i.id, price: Number(priceInput.value || 0), codeOnly: codeOnlyBox.checked || i.catalogSpecial });
+        cosmeticsAdmin = r.items || cosmeticsAdmin;
+        renderCosmetics(cosmeticsAdmin);
+        say('cosmeticMsg', `Saved ${i.name}.`, true);
+      } catch (e) { say('cosmeticMsg', e.message, false); }
+    };
+    codeOnlyBox.addEventListener('change', () => { priceInput.disabled = codeOnlyBox.checked; if (codeOnlyBox.checked) priceInput.value = 0; });
+    return h('tr', {},
+      h('td', {}, h('div', { style: 'font-weight:600' }, i.name), h('div', { class: 'muted', style: 'font-size:12px' }, `${i.type} · ${i.rarity}${i.collection ? ' · ' + i.collection : ''}`)),
+      h('td', {}, i.catalogSpecial ? h('span', { class: 'tag' }, 'catalog special') : (i.codeOnly ? h('span', { class: 'tag' }, 'code-only') : h('span', { class: 'tag on' }, 'buyable'))),
+      h('td', {}, h('label', { style: 'display:flex;gap:8px;align-items:center' }, codeOnlyBox, h('span', { class: 'muted' }, i.catalogSpecial ? 'always' : 'code-only'))),
+      h('td', {}, priceInput),
+      h('td', { style: 'text-align:right' }, h('button', { type: 'button', class: 'ghost', onclick: save }, 'Save')));
+  });
+  $('cosmeticTable').replaceChildren(
+    h('thead', {}, h('tr', {}, ['Cosmetic', 'Status', 'Code-only', 'Price (coins)', ''].map((t) => h('th', {}, t)))),
+    h('tbody', {}, rows.length ? rows : h('tr', {}, h('td', { colspan: 5, class: 'muted' }, 'No cosmetics found.'))));
+}
+
+async function loadCosmetics() {
+  try {
+    const r = await api('GET', 'cosmetics');
+    cosmeticsAdmin = r.items || [];
+    renderCosmetics(cosmeticsAdmin);
+  } catch (e) { say('cosmeticMsg', e.message, false); }
 }
 
 function renderPlayer(p) {
@@ -362,6 +410,7 @@ async function start() {
   itemOptions($('codeItem'));
   renderCodes(await api('GET', 'codes'));
   await loadPartners();
+  await loadCosmetics();
   $('coinTable').replaceChildren(h('tbody', {}, h('tr', {}, h('td', { class: 'muted' }, 'Search for a user to manage coins.'))));
   $('login').classList.add('hidden');
   $('app').classList.remove('hidden');
@@ -415,6 +464,8 @@ $('coinAddForm').addEventListener('submit', async (e) => {
     loadStats();
   } catch (err) { say('coinMsg', err.message, false); }
 });
+$('cosmeticReload').addEventListener('click', loadCosmetics);
+$('cosmeticQ').addEventListener('input', () => renderCosmetics(cosmeticsAdmin));
 $('partnerForm2').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {

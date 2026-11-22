@@ -1,0 +1,46 @@
+{
+	"required": true,
+	"package": "dev.polarclient.impl.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"client": [
+		"AbstractContainerScreenMixin",
+		"AvatarRendererMixin",
+		"BossHealthOverlayAccessor",
+		"CameraMixin",
+		"ChatComponentMixin",
+		"ClientLevelDataMixin",
+		"EntityMixin",
+		"EntityRenderDispatcherMixin",
+		"EntityRendererHitboxMixin",
+		"EntityRendererMixin",
+		"ExperienceOrbMixin",
+		"GameRendererMixin",
+		"HitboxFeatureRendererMixin",
+		"JoinMultiplayerScreenAccessor",
+		"LevelEventHandlerMixin",
+		"LevelMixin",
+		"LevelRendererMixin",
+		"LightTextureMixin",
+		"LivingEntityRendererInvoker",
+		"LivingEntityRendererMixin",
+		"MinecraftAccessor",
+		"MinecraftMixin",
+		"MobRendererMixin",
+		"MouseHandlerMixin",
+		"OverlayTextureAccessor",
+		"ParticleEngineMixin",
+		"PlayerTabOverlayAccessor",
+		"PlayerTabOverlayMixin",
+		"ScreenEffectRendererMixin",
+		"ScreenSwapMixin",
+		"ShaderManagerMixin",
+		"SoundManagerMixin",
+		"WaterFogEnvironmentMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
+}

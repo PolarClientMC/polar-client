@@ -335,11 +335,12 @@ def _blit_padded(dst, x, y, img):
 CAPE_SCALE = 4  # HD capes: 4 texels per pixel (256 x 128, a 4x vanilla cape)
 
 
-def cape_texture(front, back=None, edge=None, frames=1, elytra=None, scale=None):
+def cape_texture(front, back=None, edge=None, frames=1, elytra=None, scale=None, elytra_inside=None):
     """Builds an HD cape strip. front(W, H, frame) paints the outside (what people see from behind, 10x16 px);
     back(W, H, frame) the lining (defaults to a darker front); edge: '#rrggbb' for the sides.
     elytra(W, H, frame) paints the elytra wing (10x20 px, may be transparent outside its shape); by default the
-    elytra reuses the cape's outside. scale: texels per pixel (CAPE_SCALE by default; 8 for an HD cape's textureHD)."""
+    elytra reuses the cape's outside. elytra_inside(W, H, frame): the wing's other face (the one towards your back),
+    left clear when not given. scale: texels per pixel (CAPE_SCALE by default; 8 for an HD cape's textureHD)."""
     S = scale or CAPE_SCALE
     W, H = 64 * S, 32 * S
     strip = np.zeros((H * frames, W, 4), np.float32)
@@ -358,13 +359,15 @@ def cape_texture(front, back=None, edge=None, frames=1, elytra=None, scale=None)
         strip[oy:oy + 1 * S, 1 * S:11 * S] = side_h
         strip[oy:oy + 1 * S, 11 * S:21 * S] = side_h
         # elytra (Minecraft uses the cape texture for it). The wing is a 10 x 20 x 2 box at (22, 0) of the cape
-        # texture: the face seen from outside is the back one (36..46), the inside face (24..34) is left clear like
+        # texture: the face seen from outside is the back one (36..46), the inside face (24..34) gets elytra_inside or is left clear like
         # the game's own elytra, and the thin sides take the wing's edge colour.
         if elytra:
             ely = np.asarray(elytra(10 * S, 20 * S, f), np.float32)
         else:
             ely = np.asarray(Image.fromarray(to_u8(out)).resize((10 * S, 20 * S), Image.BILINEAR), np.float32) / 255
         strip[oy + 2 * S:oy + 22 * S, 36 * S:46 * S] = ely
+        if elytra_inside:
+            strip[oy + 2 * S:oy + 22 * S, 24 * S:34 * S] = np.asarray(elytra_inside(10 * S, 20 * S, f), np.float32)
         # each side face is only there where the wing reaches that edge: the outer side (next to the outside face's
         # left edge) follows its first column, the inner side its last, the top its first row and the bottom its last
         def side(alpha, shape, axis):

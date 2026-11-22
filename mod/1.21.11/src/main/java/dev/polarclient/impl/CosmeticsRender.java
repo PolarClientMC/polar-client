@@ -2,7 +2,9 @@ package dev.polarclient.impl;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import dev.polarclient.cosmetics.RenderBatch;
+import dev.polarclient.cosmetics.PolarTags;
 import dev.polarclient.cosmetics.WingPose;
+import java.util.List;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -21,7 +23,7 @@ import java.util.UUID;
 
 /** Draws Polar cosmetics (quads made by {@link dev.polarclient.cosmetics.Cosmetics}) and the Polar badge. */
 public final class CosmeticsRender {
-	private static final FontDescription BADGE_FONT = new FontDescription.Resource(Identifier.fromNamespaceAndPath("polarclient", "badge"));
+	private static final FontDescription BADGE_FONT = new FontDescription.Resource(Identifier.fromNamespaceAndPath("polarclient", "badge")); 
 	private static final int FULL_BRIGHT = 0xF000F0;
 
 	private CosmeticsRender() {
@@ -85,7 +87,20 @@ public final class CosmeticsRender {
 
 	/** The name with the Polar badge (a snowflake from the polarclient:badge font) in front. */
 	public static Component badged(Component name) {
-		Component badge = Component.literal("").withStyle(s -> s.withFont(BADGE_FONT).withColor(ChatFormatting.WHITE).withBold(false).withItalic(false));
+		Component badge = Component.literal("\uE000").withStyle(s -> s.withFont(BADGE_FONT).withColor(ChatFormatting.WHITE).withBold(false).withItalic(false));
 		return Component.empty().append(badge).append(" ").append(name);
+	}
+
+	/** Append code-only Polar name tags on the right side of the name. */
+	public static Component tagged(Component name, UUID uuid) {
+		List<String> tags = dev.polarclient.cosmetics.Cosmetics.tags(uuid);
+		if (tags.isEmpty()) return name;
+		Component out = name.copy();
+		for (String id : tags) {
+			PolarTags.Def def = PolarTags.get(id);
+			if (def == null) continue;
+			out = out.copy().append(Component.literal(" " + def.icon).withStyle(s -> s.withColor(def.color).withBold(false).withItalic(false)));
+		}
+		return out;
 	}
 }

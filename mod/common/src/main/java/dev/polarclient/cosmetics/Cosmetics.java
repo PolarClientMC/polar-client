@@ -47,6 +47,7 @@ public final class Cosmetics {
 		final boolean badge;
 		final Map<String, String> items = new HashMap<>();
 		final Map<String, Integer> colors = new HashMap<>();
+		final List<String> tags = new ArrayList<>();
 		final long at = System.currentTimeMillis();
 
 		Look(boolean badge) {
@@ -220,6 +221,11 @@ public final class Cosmetics {
 				}
 				JsonObject j = e.getAsJsonObject();
 				Look look = new Look(!j.has("badge") || j.get("badge").getAsBoolean());
+				if (j.has("tags") && j.get("tags").isJsonArray()) {
+					for (JsonElement t : j.getAsJsonArray("tags")) {
+						if (t.isJsonPrimitive()) look.tags.add(t.getAsString());
+					}
+				}
 				if (j.has("slots") && j.get("slots").isJsonObject()) {
 					for (Map.Entry<String, JsonElement> s : j.getAsJsonObject("slots").entrySet()) {
 						if (!s.getValue().isJsonObject()) continue;
@@ -393,6 +399,14 @@ public final class Cosmetics {
 		if (uuid == null || m == null || !m.isEnabled() || !m.showBadges() || !signedIn) return false;
 		Look l = LOOKS.get(uuid.toString());
 		return l != null && l.badge;
+	}
+
+	/** Code-only name tags for this player (right side of name), or empty if none/hidden. */
+	public static List<String> tags(UUID uuid) {
+		PolarCosmeticsModule m = module();
+		if (uuid == null || m == null || !m.isEnabled() || !signedIn) return Collections.emptyList();
+		Look l = LOOKS.get(uuid.toString());
+		return l == null || l.tags.isEmpty() ? Collections.emptyList() : l.tags;
 	}
 
 	/** The texture to use as this player's cape (the game's own cape is replaced), or null. */

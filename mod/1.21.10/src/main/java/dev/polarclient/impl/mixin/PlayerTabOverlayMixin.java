@@ -15,6 +15,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class PlayerTabOverlayMixin {
 	@Inject(method = "getNameForDisplay", at = @At("RETURN"), cancellable = true)
 	private void polar$badge(PlayerInfo info, CallbackInfoReturnable<Component> cir) {
-		if (cir.getReturnValue() != null && Cosmetics.badge(info.getProfile().id())) cir.setReturnValue(CosmeticsRender.badged(cir.getReturnValue()));
+		Component name = cir.getReturnValue();
+		if (name == null || info.getProfile() == null) return;
+		java.util.UUID id = info.getProfile().id();
+		if (Cosmetics.badge(id)) name = CosmeticsRender.badged(name);
+		name = CosmeticsRender.tagged(name, id);
+		if (name != cir.getReturnValue()) cir.setReturnValue(name);
 	}
 }

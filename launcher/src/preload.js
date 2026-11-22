@@ -66,6 +66,7 @@ contextBridge.exposeInMainWorld('polar', {
     catalog: () => call('polar:catalog'),
     saveLoadout: (loadout) => call('polar:saveLoadout', loadout),
     redeem: (code) => call('polar:redeem', code),
+    buyCosmetic: (item) => call('polar:buyCosmetic', item),
     friends: () => call('polar:friends'),
     addFriend: (name) => call('polar:addFriend', name),
     acceptFriend: (uuid) => call('polar:acceptFriend', uuid),

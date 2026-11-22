@@ -96,7 +96,7 @@ test('sign-in: Mojang confirms the challenge once; tokens are checked', async ()
   assert.equal(me.status, 200);
   assert.equal(me.data.uuid, dash(ALICE.id));
   assert.equal(me.data.name, 'Alice');
-  assert.deepEqual(me.data.loadout, { slots: {}, hideBadge: false });
+  assert.deepEqual(me.data.loadout, { slots: {}, hideBadge: false, activeTag: '' });
   // a tampered or missing token is refused
   const [b, s] = token.split('.');
   const forged = `${Buffer.from(JSON.stringify({ u: dash(BOB.id), n: 'Bob_2', e: Date.now() + 1e9 })).toString('base64url')}.${s}`;
@@ -449,6 +449,61 @@ test('coins: only the server adds them (10 an hour while the game is open) and o
   } finally {
     Date.now = realNow;
   }
+});
+
+test('cosmetic prices: free until an admin prices one, buying takes coins once, special ones are never for sale', async () => {
+  const mojang = fakeMojang();
+  const { call } = setup();
+  const admin = 'admin-pass-123456';
+  const alice = await signIn(call, mojang, ALICE);
+  // nothing priced yet: every non-special cosmetic stays free, so nobody's outfit changes on deploy
+  let r = await call('PUT', '/v1/me/loadout', { token: alice, body: { slots: { cape: 'cape_aurora' } } });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const me = (await call('GET', '/v1/me', { token: alice })).data;
+  assert.deepEqual(me.cosmeticConfig.cape_aurora, { price: 0, codeOnly: false });
+  assert.equal(me.cosmeticConfig.cape_founder.codeOnly, true);
+  assert.equal((await call('POST', '/v1/cosmetics/buy', { token: alice, body: { item: 'cape_aurora' } })).status, 400, 'free items are not sold');
+  // only the admin sets prices; a special item can't be given a price
+  assert.equal((await call('POST', '/v1/admin/cosmetics/set', { token: alice, body: { item: 'cape_aurora', price: 0 } })).status, 401);
+  assert.equal((await call('POST', '/v1/admin/cosmetics/set', { admin, body: { item: 'cape_aurora', price: 300 } })).status, 200);
+  const founder = (await call('POST', '/v1/admin/cosmetics/set', { admin, body: { item: 'cape_founder', price: 5 } })).data.items.find((i) => i.id === 'cape_founder');
+  assert.deepEqual([founder.price, founder.codeOnly], [0, true]);
+  r = await call('POST', '/v1/cosmetics/buy', { token: alice, body: { item: 'cape_founder' } });
+  assert.equal(r.status, 403);
+  // priced now: wearing it needs buying, and buying needs the coins
+  assert.equal((await call('PUT', '/v1/me/loadout', { token: alice, body: { slots: { cape: 'cape_aurora' } } })).status, 403);
+  r = await call('POST', '/v1/cosmetics/buy', { token: alice, body: { item: 'cape_aurora' } });
+  assert.equal(r.status, 402);
+  await call('POST', '/v1/admin/coins/set', { admin, body: { uuid: ALICE.id, coins: 500 } });
+  r = await call('POST', '/v1/cosmetics/buy', { token: alice, body: { item: 'cape_aurora' } });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.coins, 200);
+  assert.ok(r.data.owned.includes('cape_aurora'));
+  assert.equal((await call('POST', '/v1/cosmetics/buy', { token: alice, body: { item: 'cape_aurora' } })).status, 409, 'bought once');
+  assert.equal((await call('GET', '/v1/me/coins', { token: alice })).data.coins, 200);
+  assert.equal((await call('PUT', '/v1/me/loadout', { token: alice, body: { slots: { cape: 'cape_aurora' } } })).status, 200);
+});
+
+test('name tags: only admins grant them, players pick one they have, other players see the one picked', async () => {
+  const mojang = fakeMojang();
+  const { hub, call } = setup();
+  const admin = 'admin-pass-123456';
+  const alice = await signIn(call, mojang, ALICE);
+  const bob = await signIn(call, mojang, BOB);
+  assert.equal((await call('PUT', '/v1/me/loadout', { token: alice, body: { slots: {}, activeTag: 'dev' } })).status, 403, 'not granted');
+  assert.equal((await call('POST', '/v1/admin/tags/grant', { token: alice, body: { uuid: ALICE.id, tag: 'dev' } })).status, 401, 'players cannot grant');
+  assert.equal((await call('POST', '/v1/admin/tags/grant', { admin, body: { uuid: ALICE.id, tag: 'nope' } })).status, 400);
+  const g = await call('POST', '/v1/admin/tags/grant', { admin, body: { uuid: ALICE.id, tag: 'dev' } });
+  assert.deepEqual(g.data.tags, ['dev']);
+  let r = await call('PUT', '/v1/me/loadout', { token: alice, body: { slots: {}, activeTag: 'DEV' } });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.loadout.activeTag, 'dev');
+  await goOnline(hub, alice);
+  const ask = async () => (await call('POST', '/v1/players', { token: bob, body: { uuids: [ALICE.id] } })).data.players[dash(ALICE.id)];
+  assert.deepEqual((await ask()).tags, ['dev']);
+  // taken back: it disappears even though Alice still has it picked
+  await call('POST', '/v1/admin/tags/revoke', { admin, body: { uuid: ALICE.id, tag: 'dev' } });
+  assert.equal((await ask()).tags, undefined);
 });
 
 test('partners added in the admin panel are listed for every launcher', async () => {

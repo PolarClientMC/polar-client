@@ -292,7 +292,8 @@
           <div id="wardrobeTab">
             <div class="empty-state" id="wardrobeGate" hidden></div>
             <div class="wardrobe" id="wardrobe" hidden>
-              <div class="wr-stage">
+              <div class="wr-stage" style="position:relative">
+                <div id="wrNamePreview" style="position:absolute;left:0;right:0;top:18px;text-align:center;font-weight:700;font-size:15px;text-shadow:0 1px 4px rgba(0,0,0,.8);pointer-events:none;z-index:2"></div>
                 <canvas id="wrCanvas" width="340" height="460"></canvas>
                 <div class="wr-pose-row">
                   <div class="seg small" id="wrPose" title="Try the wings in each pose"><button class="active" data-pose="idle">Idle</button><button data-pose="walk">Walk</button><button data-pose="sprint">Sprint</button><button data-pose="sneak">Sneak</button><button data-pose="glide">Glide</button><button data-pose="fly">Fly</button></div>
@@ -307,7 +308,7 @@
               <div class="wr-side">
                 <div class="wr-top">
                   <div class="seg" id="wrSlots">
-                    <button class="active" data-slot="cape">Capes</button><button data-slot="wings">Wings</button><button data-slot="head">Hats</button><button data-slot="back">Back</button><button data-slot="aura">Auras</button>
+                    <button class="active" data-slot="cape">Capes</button><button data-slot="wings">Wings</button><button data-slot="head">Hats</button><button data-slot="back">Back</button><button data-slot="aura">Auras</button><button data-slot="tags">Name Tags</button>
                   </div>
                   <form class="wr-redeem" id="wrRedeem">
                     <input type="text" id="wrCode" placeholder="Have a code?" maxlength="40" spellcheck="false" autocomplete="off" />
@@ -317,6 +318,7 @@
                 <div class="chips" id="wrCollections"></div>
                 <div class="wr-tint" id="wrTint" hidden></div>
                 <div class="wr-grid" id="wrGrid"></div>
+                <div class="wr-tags" id="wrTags"></div>
               </div>
             </div>
           </div>

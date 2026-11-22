@@ -10,9 +10,10 @@ const path = require('node:path');
  */
 const VERSIONS = [
   { id: '26.3', loader: 'fabric', polar: true, summary: 'Polar Client · Fabric · performance pack' },
+  { id: '26.2', loader: 'fabric', polar: true, summary: 'Polar Client · Fabric · performance pack' },
   { id: '1.21.11', loader: 'fabric', polar: true, summary: 'Polar Client · Fabric · performance pack' },
   { id: '1.21.10', loader: 'fabric', polar: true, summary: 'Polar Client · Fabric · performance pack' },
-  { id: '1.21.8', loader: 'fabric', polar: false, summary: 'Fabric · performance pack' },
+  { id: '1.21.8', loader: 'fabric', polar: true, summary: 'Polar Client · Fabric · performance pack' },
   { id: '1.21.5', loader: 'fabric', polar: false, summary: 'Fabric · performance pack' },
   { id: '1.21.4', loader: 'fabric', polar: false, summary: 'Fabric · performance pack' },
   { id: '1.21.1', loader: 'fabric', polar: false, summary: 'Fabric · performance pack' },

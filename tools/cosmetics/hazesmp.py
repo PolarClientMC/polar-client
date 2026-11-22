@@ -1,6 +1,6 @@
 """HazeSMP's set (partner server): a code-only collection in HazeSMP's underwater blues.
 
-    HazeSMP Cape   (HD, with its own elytra)     capes.ITEMS
+    HazeSMP Cape   (HD, with its own elytra)     capes.ITEMS     (elytra: hazeelytra.py)
     HazeSMP Wings  (articulated, with physics)   wings.ITEMS     (hazewings.py)
     HazeSMP Trail  (layered particles)           auras.ITEMS     (hazetrail.py)
     HazeSMP Tide Crown                           heads.ITEMS     (hazecrown.py)
@@ -186,35 +186,23 @@ def lining(W, H, f, N):
 
 
 def elytra(W, H, f, N):
-    """One elytra wing (the back of the wing box: shoulder at the top, the straight inner edge on the right),
-    transparent outside its shape: the water, bubbles and HazeSMP's H at the shoulder."""
-    t = f / N
-    X, Y = grid(W, H)
-    v = Y / H
-    left = 1.5 + W * 0.38 * v ** 1.15
-    right = W - 0.5 - W * 0.42 * smoothstep(0.72, 1.0, v) ** 1.4
-    inside = (X >= left) & (X <= right) & (Y < H - 1)
-    img = rgba(np.zeros((H, W, 3), np.float32), inside.astype(np.float32))
-    img[..., :3] = _banner(W, H, cx=0.22, zoom=1.25)
-    img[..., :3] *= (1 - 0.35 * smoothstep(0.5, 1.0, v))[..., None]
-    _water(img, W, H, t, sun=(0.35, -0.05), rays=5)
-    _bubbles(img, W, H, t, 9, 5)
-    # the H from the logo near the shoulder (the part of each wing that's always seen)
-    full = _logo(round(W * 1.45))
-    hx1 = round(full.shape[1] * 0.27)                     # the H is the first quarter of HAZE
-    hy1 = round(full.shape[0] * 0.43)
-    letter = full[:hy1, :hx1]
-    _paste(img, _shine(letter, (t + 0.5) % 1), round(W * 0.5 - letter.shape[1] / 2), round(H * 0.07))
-    m = inside.astype(np.float32)
-    outline = (blur(m, 0.8) < 0.93) & inside
-    img[..., :3] = np.where(outline[..., None], rgb(OUTLINE), img[..., :3])
-    img[..., 3] = m
-    return img
+    """The elytra's outside: a feathered wing with HazeSMP's H on a crest at the shoulder (hazeelytra.py)."""
+    import hazeelytra
+    full = _logo(max(64, round(W * 2.4)))
+    letter = full[:round(full.shape[0] * 0.43), :round(full.shape[1] * 0.27)]   # the H: the first quarter of HAZE
+    return hazeelytra.elytra(W, H, f, N, letter)
+
+
+def elytra_inside(W, H, f, N):
+    """The elytra's underside (towards your back): the same wing, darker."""
+    import hazeelytra
+    return hazeelytra.underside(W, H, f, N)
 
 
 CAPE = dict(id='cape_hazesmp', name='HazeSMP Cape', collection='hazesmp', rarity='mythic', paint=cape, back=lining, elytra=elytra,
+            elytra_inside=elytra_inside,
             description="HazeSMP's partner cape: their logo over a kelp forest under water, with swaying light, rising bubbles and a "
-                        'shine across the logo. Wear an elytra and it changes to match.',
+                        'shine across the logo. Wear an elytra and it turns into feathered ocean wings with a shimmering light and HazeSMP\'s crest.',
             frames=24, frameTime=90, edge=OUTLINE, special=True, hd=True)
 
 

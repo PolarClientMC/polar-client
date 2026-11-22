@@ -15,6 +15,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /** Polar auras: drawn where the player stands, before the player's own turning is applied. */
 @Mixin(LivingEntityRenderer.class)
@@ -25,5 +26,14 @@ public abstract class LivingEntityRendererMixin {
 		Camera cam = Minecraft.getInstance().gameRenderer.getMainCamera();
 		double x = Mth.lerp(partialTicks, entity.xo, entity.getX()), y = Mth.lerp(partialTicks, entity.yo, entity.getY()), z = Mth.lerp(partialTicks, entity.zo, entity.getZ());
 		for (RenderBatch b : Cosmetics.aura(entity.getUUID(), x, y, z, cam.getYRot(), cam.getXRot())) CosmeticsRender.draw(poseStack, buffers, b, light);
+	}
+
+	/** Your own name above your head in third person (F5), like everyone else sees it (not with F1's hidden HUD).
+	 *  Other players' names are left to the game and the server: never show a name the server hides. */
+	@Inject(method = "shouldShowName(Lnet/minecraft/world/entity/LivingEntity;D)Z", at = @At("RETURN"), cancellable = true)
+	private void polar$ownName(LivingEntity entity, double distanceSq, CallbackInfoReturnable<Boolean> cir) {
+		if (cir.getReturnValueZ()) return;
+		Minecraft mc = Minecraft.getInstance();
+		if (entity == mc.player && !mc.options.hideGui && !mc.options.getCameraType().isFirstPerson()) cir.setReturnValue(true);
 	}
 }

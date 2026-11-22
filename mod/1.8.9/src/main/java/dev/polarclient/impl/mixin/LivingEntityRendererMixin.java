@@ -15,6 +15,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.nio.FloatBuffer;
 import java.util.List;
@@ -61,5 +62,13 @@ public abstract class LivingEntityRendererMixin {
 		GlStateManager.translate(x, y, z);
 		CosmeticsRender.draw(batches, entity.getLightmapCoordinates(tickDelta), true);
 		GlStateManager.popMatrix();
+	}
+
+	/** Your own name above your head in third person (F5), like everyone else sees it. Other players' names are left to the game and the server. */
+	@Inject(method = "hasLabel(Lnet/minecraft/entity/LivingEntity;)Z", at = @At("RETURN"), cancellable = true)
+	private void polar$ownName(LivingEntity entity, CallbackInfoReturnable<Boolean> cir) {
+		if (cir.getReturnValueZ()) return;
+		MinecraftClient mc = MinecraftClient.getInstance();
+		if (entity == mc.player && mc.options.perspective != 0) cir.setReturnValue(true);
 	}
 }

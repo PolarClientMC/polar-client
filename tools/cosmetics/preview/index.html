@@ -13,6 +13,7 @@
 </head>
 <body>
 <div class="grid" id="grid"></div>
+<script src="../../../launcher/src/renderer/keyframes.js"></script>
 <script src="../../../launcher/src/renderer/cosmetics3d.js"></script>
 <script>
 // ?items=cape_aurora,wings_frost&views=200:8,160:10,20:5,90:0&size=360&walk=0
@@ -41,7 +42,7 @@ async function main() {
       fig.append(cap);
       document.getElementById('grid').append(fig);
       const v = PolarCosmetics3D.create(c, { baseUrl: BASE, skin: window.SKIN || q.get('skin'), yaw, pitch, zoom: zoom || Number(q.get('zoom') || 1), time: 0 });
-      v.set({ walking: Number(q.get('walk') || 0), targetY: Number(q.get('ty') || 1.02), boost: Number(q.get('boost') || 1) });
+      v.set({ walking: Number(q.get('walk') || 0), targetY: Number(q.get('ty') || 1.02), boost: Number(q.get('boost') || 1), ...(q.get('pose') ? { pose: q.get('pose') } : {}) });
       await v.setLoadout(loadout);
       viewers.push(v);
     }

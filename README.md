@@ -2,13 +2,13 @@
 
 # Polar Client
 
-An all-in-one Minecraft client in the spirit of Lunar, Feather and Badlion — PvP HUD mods, performance and quality-of-life features — for **Minecraft Java 26.3, 1.21.11, 1.21.10, 1.16.5 and 1.8.9** on **Fabric** (Legacy Fabric for 1.8.9), with its own launcher and a polar bear logo. Every version gets the whole client: the main menu, the server list, the Right Shift menu, the HUD editor, all 79 mods and account switching.
+An all-in-one Minecraft client in the spirit of Lunar, Feather and Badlion — PvP HUD mods, performance and quality-of-life features — for **Minecraft Java 26.3, 26.2, 1.21.11, 1.21.10, 1.21.8, 1.16.5 and 1.8.9** on **Fabric** (Legacy Fabric for 1.8.9), with its own launcher and a polar bear logo. Every version gets the whole client: the main menu, the server list, the Right Shift menu, the HUD editor, all 79 mods and account switching.
 
 Polar Client only includes features that are allowed on normal servers (no cheats like kill-aura, fly or x-ray). Freelook is the one feature some servers don't allow; it can be turned off in the mod menu.
 
 | Folder | What it is |
 |---|---|
-| `mod/` | The Polar Client mod: `mod/common/` is the shared code (menus, HUD mods, settings, accounts — written once), and `mod/26.3`, `mod/1.21.11`, `mod/1.21.10`, `mod/1.16.5`, `mod/1.8.9` are one small Gradle project per Minecraft version that connects it to that version |
+| `mod/` | The Polar Client mod: `mod/common/` is the shared code (menus, HUD mods, settings, accounts — written once), and `mod/26.3`, `mod/26.2`, `mod/1.21.11`, `mod/1.21.10`, `mod/1.21.8`, `mod/1.16.5`, `mod/1.8.9` are one small Gradle project per Minecraft version that connects it to that version |
 | `launcher/` | The Polar Client desktop launcher (Electron): Microsoft sign-in, installs Java, Minecraft, Fabric, the mod and a performance pack |
 | `branding/` | The logo (`source/polar-logo-original.png`) and exports: full logo and wordmark cut-outs, badge PNGs 16–1024 px, `polar.ico`, `polar.icns` |
 | `tools/menu-background/` | Renders the main-menu background layers (voxel world ray tracer + post-processing) |
@@ -104,7 +104,7 @@ Run `deploy-server.bat` again whenever you change the server or the cosmetics (s
 **Mod** — needs JDK 25 (e.g. [Microsoft Build of OpenJDK](https://learn.microsoft.com/java/openjdk/download)); it builds the jars for the older versions too:
 
 ```bash
-cd mod/26.3              # or mod/1.21.11, mod/1.21.10, mod/1.16.5, mod/1.8.9
+cd mod/26.3              # or mod/26.2, mod/1.21.11, mod/1.21.10, mod/1.21.8, mod/1.16.5, mod/1.8.9
 ./gradlew build          # jar in build/libs/
 ./gradlew runClient      # starts that Minecraft version with Polar Client for testing
 ```
@@ -131,7 +131,7 @@ With Java 25 and Node.js installed, double-click **`build-exe.bat`** in this fol
 A Polar-styled launcher with an animated snowy-night home page (aurora, snowfall, parallax):
 
 - **Home:** Play Minecraft, the **version dropdown**, Quick Join (start and join a server straight away, or always), a live game status card, your recent servers with ping, and the Polar features.
-- **Versions:** pick **26.3, 1.21.11, 1.21.10, 1.16.5 or 1.8.9** from the dropdown next to Play. Each of these is the full Polar Client, with its own build of the mod. The dropdown also has 1.21.8, 1.21.5, 1.21.4, 1.21.1, 1.20.6, 1.20.4, 1.20.2, 1.20.1, 1.19.4, 1.19.2, 1.18.2, 1.17.1 and 1.12.2, which run on Fabric (Legacy Fabric for 1.12.2) with the performance pack but without the Polar mod yet. 26.3, 1.21.11, 1.21.10 and 1.16.5 run on Fabric with Fabric API and the performance mods that have a build for that version; 1.8.9 runs on Legacy Fabric with Legacy Fabric API. Each version downloads on its first Play, gets the right Java (25, 21 or 8) and has its own game folder; a new folder starts with a copy of your 26.3 server list.
+- **Versions:** pick **26.3, 26.2, 1.21.11, 1.21.10, 1.21.8, 1.16.5 or 1.8.9** from the dropdown next to Play. Each of these is the full Polar Client, with its own build of the mod. The dropdown also has 1.21.5, 1.21.4, 1.21.1, 1.20.6, 1.20.4, 1.20.2, 1.20.1, 1.19.4, 1.19.2, 1.18.2, 1.17.1 and 1.12.2, which run on Fabric (Legacy Fabric for 1.12.2) with the performance pack but without the Polar mod yet. 26.3, 26.2, 1.21.11, 1.21.10, 1.21.8 and 1.16.5 run on Fabric with Fabric API and the performance mods that have a build for that version; 1.8.9 runs on Legacy Fabric with Legacy Fabric API. Each version downloads on its first Play, gets the right Java (25, 21 or 8) and has its own game folder; a new folder starts with a copy of your 26.3 server list.
 - **Servers:** the selected version's own server list (its `servers.dat`, the same list you see in game). Add, edit and remove servers, see ping, players and MOTD, and Play to launch straight into one.
 - **Mods:** Polar's built-in mods and the performance pack toggles (with a note on versions where they don't apply).
 - **Browse:** search Modrinth from the launcher (sort by relevance, downloads, followers or date, filter by category) and press **Install** to put a mod in the selected version's own mods folder, with any libraries it needs. Only mods with a build for that version and loader are shown. The **Installed** tab lists what you added (with Remove) and the jars you put in the folder yourself.

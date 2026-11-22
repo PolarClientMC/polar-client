@@ -25,6 +25,8 @@ SKIN = os.path.join(ROOT, 'launcher', 'src', 'renderer', 'assets', 'mannequin.pn
 CAMERAS = {'cape': ('200:6:1.55', 0.92), 'wings': ('200:10:0.64', 1.28), 'head': ('28:14:2.3', 1.74), 'back': ('205:8:1.4', 1.0), 'aura': ('200:8:1.0', 1.0)}
 SIZE = (320, 400)
 PER_PAGE = 12  # browsers allow about 16 WebGL canvases per page
+# cosmetics shown in another pose or camera than their kind's (wings that fold away would look tiny in their card)
+OVERRIDES = {'wings_hazesmp': {'pose': 'glide', 'views': '200:12:0.56'}}
 
 
 def serve():
@@ -44,24 +46,28 @@ def main(only):
     port = srv.server_address[1]
     with sync_playwright() as p:
         browser = p.chromium.launch(args=['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'])
-        for kind, (views, ty) in CAMERAS.items():
-            group = [i for i in items if i['type'] == kind]
-            for start in range(0, len(group), PER_PAGE):
-                chunk = group[start:start + PER_PAGE]
-                page = browser.new_page(viewport={'width': 1400, 'height': 900})
-                page.add_init_script(f'window.SKIN = {json.dumps(skin)};')
-                sets = ';'.join(i['id'] for i in chunk)
-                page.goto(f'http://127.0.0.1:{port}/tools/cosmetics/preview/index.html?sets={sets}&views={views}&size={SIZE[0]}&ty={ty}&boost={2.5 if kind == 'aura' else 1}')
-                page.wait_for_function('window.ready === true', timeout=60000)
-                page.wait_for_timeout(300)
-                page.evaluate('window.stepAll(1/30, 75)')
-                urls = page.evaluate('[...document.querySelectorAll("canvas")].map(c => c.toDataURL("image/png"))')
-                page.close()
-                for item, url in zip(chunk, urls):
-                    im = Image.open(io.BytesIO(base64.b64decode(url.split(',')[1]))).convert('RGBA')
-                    im = im.resize((SIZE[0] // 2, SIZE[1] // 2), Image.LANCZOS)
-                    im.save(os.path.join(OUT, 'thumbs', f"{item['id']}.png"), optimize=True)
-                    print(f"  {item['id']}")
+        for kind, (kind_views, ty) in CAMERAS.items():
+            mine = [i for i in items if i['type'] == kind]
+            setups = sorted({(OVERRIDES.get(i['id'], {}).get('pose', ''), OVERRIDES.get(i['id'], {}).get('views', kind_views)) for i in mine})
+            for pose, views in setups:
+                group = [i for i in mine if (OVERRIDES.get(i['id'], {}).get('pose', ''), OVERRIDES.get(i['id'], {}).get('views', kind_views)) == (pose, views)]
+                for start in range(0, len(group), PER_PAGE):
+                    chunk = group[start:start + PER_PAGE]
+                    page = browser.new_page(viewport={'width': 1400, 'height': 900})
+                    page.add_init_script(f'window.SKIN = {json.dumps(skin)};')
+                    sets = ';'.join(i['id'] for i in chunk)
+                    page.goto(f'http://127.0.0.1:{port}/tools/cosmetics/preview/index.html?sets={sets}&views={views}&size={SIZE[0]}&ty={ty}'
+                              f"&boost={2.5 if kind == 'aura' else 1}" + (f'&pose={pose}' if pose else ''))
+                    page.wait_for_function('window.ready === true', timeout=60000)
+                    page.wait_for_timeout(300)
+                    page.evaluate('window.stepAll(1/30, 75)')
+                    urls = page.evaluate('[...document.querySelectorAll("canvas")].map(c => c.toDataURL("image/png"))')
+                    page.close()
+                    for item, url in zip(chunk, urls):
+                        im = Image.open(io.BytesIO(base64.b64decode(url.split(',')[1]))).convert('RGBA')
+                        im = im.resize((SIZE[0] // 2, SIZE[1] // 2), Image.LANCZOS)
+                        im.save(os.path.join(OUT, 'thumbs', f"{item['id']}.png"), optimize=True)
+                        print(f"  {item['id']}")
         browser.close()
     srv.shutdown()
     print(f'{len(items)} thumbnails -> {os.path.relpath(os.path.join(OUT, "thumbs"), ROOT)}')

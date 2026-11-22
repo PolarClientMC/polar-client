@@ -19,7 +19,10 @@ public abstract class EntityRendererMixin {
 	private void polar$nameTag(Entity entity, CallbackInfoReturnable<Component> cir) {
 		Component name = cir.getReturnValue();
 		if (name == null) return;
-		if (entity instanceof Player && Cosmetics.badge(entity.getUUID())) name = CosmeticsRender.badged(name);
+		if (entity instanceof Player p) {
+			if (Cosmetics.badge(p.getUUID())) name = CosmeticsRender.badged(name);
+			name = CosmeticsRender.tagged(name, p.getUUID());
+		}
 		name = HealthTags.withHealth(name, entity);
 		if (name != cir.getReturnValue()) cir.setReturnValue(name);
 	}

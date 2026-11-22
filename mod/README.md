@@ -7,8 +7,10 @@ Gradle project that builds `common/` together with that version's glue code into
 | Folder | Minecraft | Loader | Java | Names |
 |---|---|---|---|---|
 | `26.3/` | 26.3 | Fabric Loader 0.20.1, Fabric API 0.165.0 | 25 | unobfuscated |
+| `26.2/` | 26.2 | Fabric Loader 0.20.1, Fabric API 0.161.0 | 25 | unobfuscated |
 | `1.21.11/` | 1.21.11 | Fabric Loader 0.20.1, Fabric API 0.141.6 | 21 | Mojang |
 | `1.21.10/` | 1.21.10 | Fabric Loader 0.20.1, Fabric API 0.138.4 | 21 | Mojang |
+| `1.21.8/` | 1.21.8 | Fabric Loader 0.20.1, Fabric API 0.136.1 | 21 | Mojang |
 | `1.16.5/` | 1.16.5 | Fabric Loader 0.20.1, Fabric API 0.42.0 | 8 | Mojang |
 | `1.8.9/` | 1.8.9 | Legacy Fabric (Loader 0.18.3), no API needed | 8 | Legacy Yarn |
 

@@ -21,7 +21,7 @@ export const DELETE_CHOICES = [
 
 export const FAQ = {
   free: ['Is Polar Client free?', 'Yes, all of it. Every cosmetic in the wardrobe is free too. A few special ones are code-only and are given away in events and giveaways.'],
-  versions: ['Which versions does it run?', 'Polar Client itself on 26.3, 1.21.11, 1.21.10, 1.16.5 and 1.8.9. The launcher also plays 1.21.8, 1.21.5, 1.21.4, 1.21.1, 1.20.6, 1.20.4, 1.20.2, 1.20.1, 1.19.4, 1.19.2, 1.18.2, 1.17.1 and 1.12.2 with the performance pack.'],
+  versions: ['Which versions does it run?', 'Polar Client itself on 26.3, 26.2, 1.21.11, 1.21.10, 1.21.8, 1.16.5 and 1.8.9. The launcher also plays 1.21.5, 1.21.4, 1.21.1, 1.20.6, 1.20.4, 1.20.2, 1.20.1, 1.19.4, 1.19.2, 1.18.2, 1.17.1 and 1.12.2 with the performance pack.'],
   servers: ['Can I use it on servers?', 'Polar Client only has legit features. Servers make their own rules, so if a server doesn\'t allow something (a minimap, for example), turn it off in game with **Right Shift**.'],
   mods: ['Can I add my own mods?', 'Yes. The Browse page installs mods from Modrinth, or open the Mods page and use the Game folder button to add your own Fabric mods.'],
   profiles: ['What are profiles?', 'Profiles keep different setups, each with its own Minecraft version, folder, mods and memory. Make one from the button next to Play.'],

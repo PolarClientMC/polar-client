@@ -89,7 +89,7 @@ test('the launcher window can load everything it shows at startup', async () => 
 
   // every version in the dropdown can be picked, and app:info follows it
   const versions = (await call('versions:list')).data.versions.map((v) => v.id);
-  assert.deepEqual(versions, ['26.3', '1.21.11', '1.21.10', '1.21.8', '1.21.5', '1.21.4', '1.21.1', '1.20.6', '1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.19.2', '1.18.2', '1.17.1', '1.16.5', '1.12.2', '1.8.9']);
+  assert.deepEqual(versions, ['26.3', '26.2', '1.21.11', '1.21.10', '1.21.8', '1.21.5', '1.21.4', '1.21.1', '1.20.6', '1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.19.2', '1.18.2', '1.17.1', '1.16.5', '1.12.2', '1.8.9']);
   for (const id of versions) {
     const res = await call('versions:select', id);
     assert.equal(res.ok, true, `select ${id}: ${res.error}`);

@@ -1,6 +1,15 @@
 {
   "items": [
     {
+      "id": "release-1.0.20",
+      "date": "2026-11-22",
+      "tag": "Update",
+      "title": "Polar Client 1.0.20",
+      "body": "Name tags next to player names, your own name in third person (F5), Polar Client on 26.2 and 1.21.8, and cosmetic prices set from the admin page.",
+      "link": "https://github.com/PolarClientMC/polar-client/releases/tag/v1.0.20",
+      "linkLabel": "Release notes"
+    },
+    {
       "id": "release-1.0.19",
       "date": "2026-11-22",
       "tag": "Update",

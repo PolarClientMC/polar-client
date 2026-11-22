@@ -407,6 +407,10 @@ class PolarService {
     return this.api('POST', '/v1/redeem', { code: String(code || '') });
   }
 
+  buyCosmetic(item) {
+    return this.api('POST', '/v1/cosmetics/buy', { item: String(item || '') });
+  }
+
   // ---------------------------------------------------------------- friends
 
   friends() {

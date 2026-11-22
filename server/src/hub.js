@@ -44,6 +44,10 @@ const SCHEMA = [
   // partnered servers managed from the admin panel
   `CREATE TABLE IF NOT EXISTS partners (id TEXT PRIMARY KEY, name TEXT NOT NULL, ip TEXT NOT NULL, description TEXT,
      tags TEXT, discord TEXT, logo TEXT, banner TEXT, created INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL DEFAULT 0)`,
+  // per-cosmetic coin price and code-only flag (editable from admin); no row = free for everyone
+  `CREATE TABLE IF NOT EXISTS cosmetic_config (item TEXT PRIMARY KEY, price INTEGER NOT NULL DEFAULT 0, code_only INTEGER NOT NULL DEFAULT 0)`,
+  // code-only profile tags shown next to the player name (icons, granted by admins)
+  `CREATE TABLE IF NOT EXISTS player_tags (uuid TEXT NOT NULL, tag TEXT NOT NULL, created INTEGER NOT NULL, PRIMARY KEY (uuid, tag))`,
 ];
 
 const SEEDED_COIN_USERS = ['sharky124321345', 'CraftyCanyon'];
@@ -54,6 +58,15 @@ const IN_GAME = new Set(['menu', 'singleplayer', 'server', 'hidden']);
 const MAX_PLAY_STRETCH = 6 * 3600 * 1000;
 const MAX_PARTNERS = 24;
 const partnerStr = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
+// Code-only name tags (icons shown to the right of the name). Extend by adding entries here.
+const TAGS = [
+  { id: 'dev', label: 'DEV', icon: '⌘', color: '#7dd3fc' },
+  { id: 'staff', label: 'STAFF', icon: '★', color: '#fbbf24' },
+  { id: 'partner', label: 'PARTNER', icon: '◆', color: '#c084fc' },
+  { id: 'og', label: 'OG', icon: '●', color: '#34d399' },
+  { id: 'vip', label: 'VIP', icon: '♦', color: '#fb7185' },
+];
+const TAG_BY_ID = new Map(TAGS.map((t) => [t.id, t]));
 const partnerImage = (v) => (typeof v === 'string' && /^https:\/\/raw\.githubusercontent\.com\/[^\s"'<>()]+$/.test(v.trim()) ? v.trim() : '');
 const partnerDiscord = (v) => (typeof v === 'string' && /^https:\/\/(discord\.gg|discord\.com\/invite)\/[A-Za-z0-9-]+\/?$/.test(v.trim()) ? v.trim() : '');
 const partnerAddress = (v) => (typeof v === 'string' && /^[A-Za-z0-9.-]{3,253}(:\d{1,5})?$/.test(v.trim()) ? v.trim().toLowerCase() : '');
@@ -144,6 +157,7 @@ export class Hub {
     if (p === '/v1/me' && m === 'GET') return json(this.profile(me));
     if (p === '/v1/me/coins' && m === 'GET') return json(this.myCoins(me.uuid));
     if (p === '/v1/me/loadout' && m === 'PUT') return json(this.setLoadout(me, await body(request)));
+    if (p === '/v1/cosmetics/buy' && m === 'POST') return json(this.buyCosmetic(me, await body(request)));
     if (p === '/v1/players' && m === 'POST') return json(this.lookup(await body(request, 64 * 1024)));
     if (p === '/v1/redeem' && m === 'POST') return json(this.redeem(me, await body(request)));
     if (p === '/v1/sync' && m === 'GET') return json(this.getSync(me));
@@ -382,13 +396,48 @@ export class Hub {
 
   // ------------------------------------------------------------------ cosmetics
 
+  cosmeticConfig(item) {
+    if (!item) return { price: 0, codeOnly: false };
+    const row = this.sql.exec('SELECT price, code_only FROM cosmetic_config WHERE item = ?', item.id).toArray()[0];
+    const codeOnly = Boolean(item.special || (row && row.code_only));
+    const rawPrice = row ? Number(row.price) : 0; // free unless an admin sets a price
+    const price = codeOnly ? 0 : Math.max(0, Math.floor(Number.isFinite(rawPrice) ? rawPrice : 0));
+    return { price, codeOnly };
+  }
+
+  cosmeticConfigAll() {
+    const rows = this.sql.exec('SELECT item, price, code_only FROM cosmetic_config').toArray();
+    const byId = new Map(rows.map((r) => [r.item, r]));
+    const out = {};
+    for (const item of ITEMS.values()) {
+      const row = byId.get(item.id);
+      const codeOnly = Boolean(item.special || (row && row.code_only));
+      const rawPrice = row ? Number(row.price) : 0; // free unless an admin sets a price
+      out[item.id] = { price: codeOnly ? 0 : Math.max(0, Math.floor(Number.isFinite(rawPrice) ? rawPrice : 0)), codeOnly };
+    }
+    return out;
+  }
+
   owned(uuid) {
     return new Set(this.sql.exec('SELECT item FROM grants WHERE uuid = ?', uuid).toArray().map((r) => r.item));
   }
 
-  /** May this player wear the item? Free items yes; special ones when they were given it. */
+  tags(uuid) {
+    return this.sql.exec('SELECT tag FROM player_tags WHERE uuid = ? ORDER BY created ASC', uuid).toArray()
+      .map((r) => r.tag).filter((id) => TAG_BY_ID.has(id));
+  }
+
+  tagDefs(ids) {
+    return ids.map((id) => TAG_BY_ID.get(id)).filter(Boolean).map((t) => ({ id: t.id, label: t.label, icon: t.icon, color: t.color }));
+  }
+
+  /** May this player wear the item? Code-only items need a grant; priced items need purchase; free items are open. */
   allowed(item, owned) {
-    return item && (!item.special || owned.has(item.id));
+    if (!item) return false;
+    const cfg = this.cosmeticConfig(item);
+    if (cfg.codeOnly) return owned.has(item.id);
+    if (cfg.price > 0) return owned.has(item.id);
+    return true;
   }
 
   /** What a player wears, minus anything that no longer exists or was taken back. */
@@ -406,12 +455,17 @@ export class Hub {
       const item = v && ITEMS.get(v.id);
       if (item && item.type === slot && this.allowed(item, owned)) slots[slot] = v.color ? { id: v.id, color: v.color } : { id: v.id };
     }
-    return { slots, hideBadge: Boolean(data.hideBadge) };
+    const tags = this.tags(uuid);
+    const wantTag = String(data.activeTag || '').trim().toLowerCase();
+    const activeTag = tags.includes(wantTag) ? wantTag : '';
+    return { slots, hideBadge: Boolean(data.hideBadge), activeTag };
   }
 
   profile(me) {
     const owned = this.owned(me.uuid);
-    return { uuid: me.uuid, name: me.name, loadout: this.loadout(me.uuid, owned), owned: [...owned].filter((id) => ITEMS.has(id)) };
+    const tags = this.tags(me.uuid);
+    const loadout = this.loadout(me.uuid, owned);
+    return { uuid: me.uuid, name: me.name, loadout, activeTag: loadout.activeTag || '', owned: [...owned].filter((id) => ITEMS.has(id)), cosmeticConfig: this.cosmeticConfigAll(), tags, tagDefs: this.tagDefs(tags), allTags: TAGS };
   }
 
   setLoadout(me, b) {
@@ -424,14 +478,46 @@ export class Hub {
       if (typeof v === 'string') v = { id: v };
       const item = ITEMS.get(String(v.id));
       if (!item || item.type !== slot) throw new HttpError(400, `There's no ${slot} called ${v.id}.`);
-      if (!this.allowed(item, owned)) throw new HttpError(403, `${item.name} is a special cosmetic you don't have.`);
+      if (!this.allowed(item, owned)) {
+        const cfg = this.cosmeticConfig(item);
+        if (cfg.codeOnly) throw new HttpError(403, `${item.name} is a special cosmetic you don't have.`);
+        throw new HttpError(403, `${item.name} costs ${cfg.price} coins. Buy it in the wardrobe first.`);
+      }
       const color = typeof v.color === 'string' ? v.color.toLowerCase() : '';
       slots[slot] = item.tint && COLOR.test(color) ? { id: item.id, color } : { id: item.id };
     }
-    const data = { slots, hideBadge: Boolean(b.hideBadge) };
+    const tags = this.tags(me.uuid);
+    let activeTag = String(b.activeTag == null ? (this.loadout(me.uuid, owned).activeTag || '') : b.activeTag).trim().toLowerCase();
+    if (activeTag && !tags.includes(activeTag)) throw new HttpError(403, "You don't have that tag.");
+    const data = { slots, hideBadge: Boolean(b.hideBadge), activeTag };
     this.sql.exec(`INSERT INTO loadouts (uuid, data, updated) VALUES (?, ?, ?)
       ON CONFLICT (uuid) DO UPDATE SET data = excluded.data, updated = excluded.updated`, me.uuid, JSON.stringify(data), Date.now());
     return { loadout: data };
+  }
+
+  buyCosmetic(me, b) {
+    this.limit(`buy:${me.uuid}`, 30);
+    const item = ITEMS.get(String(b.item || ''));
+    if (!item) throw new HttpError(400, 'Pick a cosmetic.');
+    const cfg = this.cosmeticConfig(item);
+    if (cfg.codeOnly) throw new HttpError(403, `${item.name} is code-only and can't be bought with coins.`);
+    if (cfg.price <= 0) throw new HttpError(400, `${item.name} is free.`);
+    const owned = this.owned(me.uuid);
+    if (owned.has(item.id)) throw new HttpError(409, `You already own ${item.name}.`);
+
+    const coins = this.settleCoins(me.uuid);
+    if (coins < cfg.price) throw new HttpError(402, `You need ${cfg.price} coins to buy ${item.name}. You have ${Math.floor(coins)}.`);
+
+    const now = Date.now();
+    const nextCoins = coins - cfg.price;
+    const playing = this.inGame(me.uuid) ? now : null;
+    this.sql.exec(`INSERT INTO coin_balances (uuid, name, coins, updated, playing_since) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT (uuid) DO UPDATE SET coins = excluded.coins, updated = excluded.updated, playing_since = excluded.playing_since, name = CASE WHEN coin_balances.name = '' THEN excluded.name ELSE coin_balances.name END`,
+      me.uuid, me.name || me.uuid, nextCoins, now, playing);
+    this.sql.exec('INSERT OR IGNORE INTO grants (uuid, item, source, created) VALUES (?, ?, ?, ?)', me.uuid, item.id, 'coins', now);
+    this.tell(me.uuid, { type: 'coins', coins: Math.floor(nextCoins) });
+
+    return { ok: true, coins: Math.floor(nextCoins), owned: [...this.owned(me.uuid)].filter((id) => ITEMS.has(id)), item: item.id };
   }
 
   /** Which of these players are on Polar right now, and what they wear. Asked by the game for the players it sees. */
@@ -442,6 +528,7 @@ export class Hub {
       if (!this.online(uuid)) continue;
       const l = this.loadout(uuid);
       players[uuid] = { badge: !l.hideBadge, slots: l.slots };
+      if (l.activeTag) players[uuid].tags = [l.activeTag]; // left out when there's none
     }
     return { players, ttl: 120 };
   }
@@ -654,6 +741,11 @@ export class Hub {
     if (p === 'partners' && method === 'GET') return json(this.adminPartnersList());
     if (p === 'partners/save' && method === 'POST') return json(this.adminPartnersSave(await body(request)));
     if (p === 'partners/delete' && method === 'POST') return json(this.adminPartnersDelete(await body(request)));
+    if (p === 'cosmetics' && method === 'GET') return json(this.adminCosmeticsList());
+    if (p === 'cosmetics/set' && method === 'POST') return json(this.adminCosmeticsSet(await body(request)));
+    if (p === 'tags' && method === 'GET') return json({ tags: TAGS });
+    if (p === 'tags/grant' && method === 'POST') return json(await this.adminTagGrant(await body(request), true));
+    if (p === 'tags/revoke' && method === 'POST') return json(await this.adminTagGrant(await body(request), false));
     throw new HttpError(404, 'Not found');
   }
 
@@ -710,7 +802,8 @@ export class Hub {
   async adminPlayer(q) {
     const p = await this.resolve(q);
     const grants = this.sql.exec('SELECT item, source, created FROM grants WHERE uuid = ? ORDER BY created DESC', p.uuid).toArray();
-    return { uuid: p.uuid, name: p.name, offline: isOfflineUuid(p.uuid), signedIn: p.first_seen > 0, lastSeen: p.last_seen, banned: Boolean(p.banned), online: this.online(p.uuid), grants, items: grants.map((g) => g.item), loadout: this.loadout(p.uuid) };
+    const tags = this.tags(p.uuid);
+    return { uuid: p.uuid, name: p.name, offline: isOfflineUuid(p.uuid), signedIn: p.first_seen > 0, lastSeen: p.last_seen, banned: Boolean(p.banned), online: this.online(p.uuid), grants, items: grants.map((g) => g.item), loadout: this.loadout(p.uuid), tags, tagDefs: this.tagDefs(tags), allTags: TAGS };
   }
 
   async adminGrant(b, give) {
@@ -719,6 +812,16 @@ export class Hub {
     const p = await this.resolve(b.player || b.uuid || b.name || b.q);
     if (give) this.sql.exec('INSERT OR IGNORE INTO grants (uuid, item, source, created) VALUES (?, ?, ?, ?)', p.uuid, item.id, 'admin', Date.now());
     else this.sql.exec('DELETE FROM grants WHERE uuid = ? AND item = ?', p.uuid, item.id);
+    return this.adminPlayer(p.uuid);
+  }
+
+  async adminTagGrant(b, give) {
+    const tag = String(b.tag || '').trim().toLowerCase();
+    if (!TAG_BY_ID.has(tag)) throw new HttpError(400, 'Pick a tag.');
+    const p = await this.resolve(b.player || b.uuid || b.name || b.q);
+    if (give) this.sql.exec('INSERT OR IGNORE INTO player_tags (uuid, tag, created) VALUES (?, ?, ?)', p.uuid, tag, Date.now());
+    else this.sql.exec('DELETE FROM player_tags WHERE uuid = ? AND tag = ?', p.uuid, tag);
+    this.tell(p.uuid, { type: 'tags', tags: this.tags(p.uuid) });
     return this.adminPlayer(p.uuid);
   }
 
@@ -936,5 +1039,30 @@ export class Hub {
     if (!id) throw new HttpError(400, 'Pick a partnered server.');
     this.sql.exec('DELETE FROM partners WHERE id = ?', id);
     return this.adminPartnersList();
+  }
+
+  adminCosmeticsList() {
+    const cfg = this.cosmeticConfigAll();
+    const items = [...ITEMS.values()].map((item) => ({
+      id: item.id,
+      name: item.name,
+      type: item.type,
+      rarity: item.rarity || 'common',
+      collection: item.collection || '',
+      catalogSpecial: Boolean(item.special),
+      ...cfg[item.id],
+    }));
+    return { items };
+  }
+
+  adminCosmeticsSet(b) {
+    const item = ITEMS.get(String(b.item || ''));
+    if (!item) throw new HttpError(400, 'Pick a cosmetic.');
+    const codeOnly = Boolean(item.special || b.codeOnly);
+    const rawPrice = Number(b.price);
+    const price = codeOnly ? 0 : Math.max(0, Math.min(1000000, Math.floor(Number.isFinite(rawPrice) ? rawPrice : 0)));
+    this.sql.exec(`INSERT INTO cosmetic_config (item, price, code_only) VALUES (?, ?, ?)
+      ON CONFLICT (item) DO UPDATE SET price = excluded.price, code_only = excluded.code_only`, item.id, price, codeOnly ? 1 : 0);
+    return this.adminCosmeticsList();
   }
 }

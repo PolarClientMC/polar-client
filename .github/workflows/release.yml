@@ -44,7 +44,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        minecraft: ['26.3', '1.21.11', '1.21.10', '1.16.5', '1.8.9']
+        minecraft: ['26.3', '26.2', '1.21.11', '1.21.10', '1.21.8', '1.16.5', '1.8.9']
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -87,7 +87,7 @@ jobs:
       - name: Put each version's jar back where bundle-mod looks for it
         shell: bash
         run: |
-          for v in 26.3 1.21.11 1.21.10 1.16.5 1.8.9; do
+          for v in 26.3 26.2 1.21.11 1.21.10 1.21.8 1.16.5 1.8.9; do
             mkdir -p ../mod/$v/build/libs
             cp ../polarclient-mod-$v/*.jar ../mod/$v/build/libs/
           done

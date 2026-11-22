@@ -30,12 +30,12 @@ public abstract class LivingEntityRendererMixin {
 		if (id == null) return;
 		for (RenderBatch b : Cosmetics.aura(id, state.x, state.y, state.z, camera.yRot, camera.xRot)) CosmeticsRender.submit(poseStack, collector, b, state.lightCoords);
 	}
-	/** Your own name above your head in third person (F5), like everyone else sees it (not with F1's hidden HUD).
+	/** Your own name above your head in third person (F5), like everyone else sees it.
 	 *  Other players' names are left to the game and the server: never show a name the server hides. */
 	@Inject(method = "shouldShowName(Lnet/minecraft/world/entity/LivingEntity;D)Z", at = @At("RETURN"), cancellable = true)
 	private void polar$ownName(LivingEntity entity, double distanceSq, CallbackInfoReturnable<Boolean> cir) {
 		if (cir.getReturnValueZ()) return;
 		Minecraft mc = Minecraft.getInstance();
-		if (entity == mc.player && !mc.options.hideGui && !mc.options.getCameraType().isFirstPerson()) cir.setReturnValue(true);
+		if (entity == mc.player && !mc.options.getCameraType().isFirstPerson()) cir.setReturnValue(true);
 	}
 }

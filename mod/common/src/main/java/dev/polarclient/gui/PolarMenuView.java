@@ -37,16 +37,32 @@ public class PolarMenuView extends View {
 	private static final String[] NAV_LABELS = {"Mods", "HUD Editor", "Settings", "Cosmetics", "Profiles"};
 	private static final String[] NAV_ICONS = {Icon.MODS, Icon.GRID, Icon.SETTINGS, Icon.CHECKROOM, Icon.STACKS};
 
-	static final float DW = 560, DH = 292, R = 11;
-	private static final float SIDE_W = 100, SIDE_MIN = 40;
-	private static final float NAV_X = 9, NAV_Y = 58, NAV_H = 24, NAV_STEP = 29;
-	private static final float BANNER_H = 57.5f;
-	private static final float PAD = 10.8f;
-	private static final float CHIP_Y = 65.5f, CHIP_H = 16;
-	private static final float GRID_Y = 90, CARD_H = 60.6f, CARD_GAP_X = 8, CARD_GAP_Y = 5.8f;
-	private static final float SW_W = 19, SW_H = 10.8f;
+	static final float DW = 584, DH = 322, R = 12;
+	private static final float SIDE_W = 132, SIDE_MIN = 44;
+	private static final float NAV_X = 8, NAV_Y = 54, NAV_H = 22, NAV_STEP = 26;
+	/** Where the pages below the header start. */
+	private static final float BANNER_H = 46;
+	private static final float PAD = 16;
+	private static final float CHIP_Y = 48, CHIP_H = 18;
+	private static final float GRID_Y = 76, CARD_H = 62, CARD_GAP_X = 8, CARD_GAP_Y = 8;
+	private static final float SW_W = 20, SW_H = 11;
+	private static final float DRAWER_W = 236;
+	private static final int ACCENT = 0xFF5AD8FF;
 
-	private static final String BANNER = "textures/gui/menu/banner.png";
+	/** Each category's tint (icon tiles, category labels). */
+	private static int tint(Category c) {
+		switch (c) {
+			case HUD: return 0xFF5AD8FF;
+			case VISUAL: return 0xFFA88BFF;
+			case COMBAT: return 0xFFFF7A85;
+			case UTILITY: return 0xFFFFC46B;
+			case WORLD: return 0xFF5FE3A1;
+			case SOCIAL: return 0xFF7CB8FF;
+			case PERFORMANCE: return 0xFF6BF0D8;
+			case ACCESSIBILITY: return 0xFFFFA8D6;
+			default: return 0xFFFFD36B;
+		}
+	}
 	private static final String PEAKS = "textures/gui/menu/side_peaks.png";
 
 	private static Page lastPage = Page.MODS;
@@ -76,6 +92,9 @@ public class PolarMenuView extends View {
 	private final Map<Module, Float> hoverAnim = new HashMap<Module, Float>();
 	private final Map<Module, Float> onAnim = new HashMap<Module, Float>();
 	private final float[] navHover = new float[NAV_LABELS.length];
+	private float navSel = -1, pillX = -1, pillW, drawerK;
+	private Module drawerModule;
+	private final Map<Module, float[]> cardPos = new HashMap<Module, float[]>();
 	private Module hovered;
 
 	public PolarMenuView(Object parent) {
@@ -129,7 +148,7 @@ public class PolarMenuView extends View {
 	private void layout() {
 		int gs = Math.max(1, p().guiScale());
 		float screenW = width * gs, screenH = height * gs;
-		int px = (int) Math.floor(Math.min(screenW * 0.9f / DW, screenH * 0.88f / DH));
+		int px = (int) Math.floor(Math.min(screenW * 0.94f / DW, screenH * 0.92f / DH));
 		String size = Polar.modules().client.menuSize.get();
 		if (size.equals("Small")) px -= 1;
 		else if (size.equals("Large") && (px + 1) * DW <= screenW * 0.98f && (px + 1) * DH <= screenH * 0.98f) px += 1;
@@ -175,12 +194,12 @@ public class PolarMenuView extends View {
 	}
 
 	private int columns() {
-		return contentW() > 400 ? 4 : 3;
+		return 3;
 	}
 
 	private float cardW() {
 		int cols = columns();
-		return (contentW() - PAD - 7.6f - (cols - 1) * CARD_GAP_X) / cols;
+		return (contentW() - PAD * 2 - (cols - 1) * CARD_GAP_X) / cols;
 	}
 
 	private float gridX() {
@@ -209,7 +228,7 @@ public class PolarMenuView extends View {
 	}
 
 	private float gridBottom() {
-		return DH - 6;
+		return DH - 10;
 	}
 
 	private float maxScroll() {
@@ -240,16 +259,13 @@ public class PolarMenuView extends View {
 		closeModule();
 		page = Page.MODS;
 		moduleSettings = new SettingsView(m);
-		pageDirection = 1;
-		pageChangedAt = System.currentTimeMillis();
+		drawerModule = m;
 	}
 
 	private void closeModule() {
 		if (moduleSettings != null) {
 			moduleSettings.dispose();
 			moduleSettings = null;
-			pageDirection = -1;
-			pageChangedAt = System.currentTimeMillis();
 		}
 	}
 
@@ -312,17 +328,19 @@ public class PolarMenuView extends View {
 
 			float slide = (1f - Ui.easeOut((System.currentTimeMillis() - pageChangedAt) / 260f)) * 14f * pageDirection;
 			g.scissor(Math.round(contentX()) + 1, 1, Math.round(DW) - 1, Math.round(DH) - 1);
-			drawBanner(g, c);
 			g.push();
 			g.translate(slide, 0);
 			search.visible = false;
 			profileName.visible = false;
-			if (moduleSettings != null) drawModuleSettings(g, mx, my, c, t);
-			else if (page == Page.MODS) drawMods(g, mx, my, c, t);
-			else if (page == Page.SETTINGS) drawClientSettings(g, mx, my, c, t);
+			boolean drawerOpen = moduleSettings != null;
+			float pmx = drawerOpen ? -1 : mx, pmy = drawerOpen ? -1 : my;
+			if (page == Page.MODS) drawMods(g, pmx, pmy, c, t);
+			else if (page == Page.SETTINGS) drawClientSettings(g, pmx, pmy, c, t);
 			else if (page == Page.COSMETICS) drawCosmetics(g, mx, my, c, t);
 			else if (page == Page.PROFILES) drawProfiles(g, mx, my, c, t);
 			g.pop();
+			drawerK = Ui.approach(drawerK, drawerOpen ? 1f : 0f, 14f);
+			if (drawerK > 0.01f && drawerModule != null) drawDrawer(g, mx, my, c, t);
 			g.endScissor();
 			drawToast(g, c);
 		} finally {
@@ -332,151 +350,192 @@ public class PolarMenuView extends View {
 	}
 
 	private void drawWindow(Gfx g, Pal c) {
-		// soft outer glow + bright rim, then the frosted glass body
-		Ui.rect(g, -2.5f, -2.5f, DW + 5, DH + 5, R + 2.5f, Theme.alpha(c.highlight, 0.06f));
-		Ui.rect(g, -1.2f, -1.2f, DW + 2.4f, DH + 2.4f, R + 1.2f, Theme.alpha(c.highlight, 0.14f));
-		Ui.rect(g, 0, 0, DW, DH, R, c.glass);
-		Ui.ring(g, 0, 0, DW, DH, R, Theme.alpha(Theme.mix(0xFF1E5B95, c.highlight, 0.35f), 0.95f), 1.5f);
-		// brighter rim along the top right, like light catching the glass
-		Ui.hGradient(g, DW * 0.55f, 0, DW * 0.45f - R, 0.6f, 0x0040C8FF, Theme.alpha(c.highlight, 0.85f));
+		// a soft drop shadow, the frosted glass body, and a rim that catches the light at two corners
+		for (int k = 4; k >= 1; k--) Ui.rect(g, -k * 2f, -k * 1.5f + 4, DW + k * 4f, DH + k * 3f, R + k * 2f, Theme.alpha(0xFF000000, 0.07f));
+		Ui.rect(g, 0, 0, DW, DH, R, 0xDB081124);
+		Ui.ring(g, 0, 0, DW, DH, R, 0x33789AE6, 1.2f);
+		Ui.hGradient(g, R, 0, DW * 0.4f, 0.7f, 0x8CA0D7FF, 0x00A0D7FF);
+		Ui.hGradient(g, DW * 0.6f, DH - 0.7f, DW * 0.4f - R, 0.7f, 0x00A0D7FF, 0x52A0D7FF);
 	}
 
 	private void drawSidebar(Gfx g, float mx, float my, Pal c, Theme t) {
 		float w = side;
-		Ui.rect(g, 1, 1, w - 1, DH - 2, R - 1, 0, 0, R - 1, c.sideGlass);
-		Ui.vline(g, w, 1, DH - 2, 1, c.line);
-		float expand = (side - SIDE_MIN) / (SIDE_W - SIDE_MIN);
+		float expand = Math.max(0, Math.min(1, (side - SIDE_MIN) / (SIDE_W - SIDE_MIN)));
+		Ui.rect(g, 0.5f, 0.5f, w - 0.5f, DH - 1, R - 0.5f, 0, 0, R - 0.5f, 0xB3060D1C);
+		Ui.vline(g, w - 0.5f, 1, DH - 2, 1, 0x1FA0C8FF);
 
-		// mountains along the bottom (the bottom band is drawn as a rounded block so the corner stays round)
-		float peaksH = 52;
-		g.scissor(1, Math.round(DH - R - peaksH - 1), Math.round(w), Math.round(DH - R) + 1);
-		g.blit(PEAKS, 0, DH - R - peaksH + 0.5f, w, peaksH, 0, 0, Math.min(1, w / SIDE_W), 1, 0xFFFFFFFF);
+		// mountains along the bottom, fading into the panel
+		float peaksH = 62;
+		g.scissor(1, Math.round(DH - peaksH), Math.round(w), Math.round(DH - 1));
+		g.blit(PEAKS, 0, DH - peaksH, w, peaksH, 0, 0, Math.min(1, w / SIDE_W), 1, 0xB3FFFFFF);
 		g.endScissor();
-		Ui.rect(g, 1, DH - R - 0.5f, w - 1, R - 0.5f, 0, 0, 0, R - 1, 0xFF131F39);
+		g.gradient(1, Math.round(DH - 70), Math.round(w), Math.round(DH - R), 0x00060D1C, 0xD9060D1C);
+		Ui.rect(g, 1, DH - R, w - 1, R - 1, 0, 0, 0, R - 1, 0xD9060D1C);
 
-		// logo: badge + POLAR / CLIENT
-		float bx = 26 - (1 - expand) * 6, by = 25.5f;
-		Ui.glow(g, bx, by, 24, 24, Theme.alpha(c.highlight, 0.30f));
-		Ui.circle(g, bx, by, 15.5f, Theme.alpha(c.highlight, 0.9f));
-		Ui.circle(g, bx, by, 14.6f, 0xFF0A1830);
-		Draw.texture(g, Draw.MARK_LARGE, Math.round(bx - 13), Math.round(by - 13), 26, 26);
+		// logo: the round badge, then Polar / Client
+		float lx = 22 - 6 * expand, ly = 24;
+		Ui.glow(g, lx, ly, 22, 22, Theme.alpha(ACCENT, 0.22f));
+		Ui.circle(g, lx, ly, 13, Theme.alpha(ACCENT, 0.8f));
+		Ui.circle(g, lx, ly, 12, 0xFF0A1830);
+		Draw.texture(g, Draw.MARK_LARGE, Math.round(lx - 10.5f), Math.round(ly - 10.5f), 21, 21);
 		if (expand > 0.05f) {
-			int ta = Math.round(255 * expand);
-			g.push();
-			g.translate(45, 16.5f);
-			g.scale(0.86f);
-			Ui.text(g, "POLAR", 0, 0, Draw.alpha(c.text, ta), Fonts.TITLE);
-			g.pop();
-			Ui.textSpaced(g, "CLIENT", 45.5f, 33.5f, Draw.alpha(0xFF8FB4E6, ta), Fonts.BODY, 0.7f);
+			int a = Math.round(255 * expand);
+			Ui.textMid(g, "Polar", lx + 19, ly - 4, Draw.alpha(c.text, a), Fonts.LARGE);
+			Ui.textMid(g, "Client", lx + 19.5f, ly + 7, Draw.alpha(0xFF8FB4E6, a), Fonts.SMALL);
 		}
 
-		// navigation
-		Page active = moduleSettings != null ? Page.MODS : page;
+		// navigation with a sliding highlight
+		Page active = page;
+		float iw = w - NAV_X * 2;
+		float target = NAV_Y + active.ordinal() * NAV_STEP;
+		navSel = navSel < 0 ? target : Ui.approach(navSel, target, 16f);
+		Ui.rect(g, NAV_X, navSel, iw, NAV_H, 7, 0x1F5AD8FF);
+		Ui.ring(g, NAV_X, navSel, iw, NAV_H, 7, 0x735AD8FF, 1f);
+		Ui.rect(g, NAV_X + 1, navSel + 5, 1.6f, NAV_H - 10, 0.8f, ACCENT);
 		for (int i = 0; i < NAV_LABELS.length; i++) {
 			float iy = NAV_Y + i * NAV_STEP;
-			float iw = w - NAV_X * 2;
 			boolean on = Page.values()[i] == active;
 			boolean hover = Ui.inside(mx, my, NAV_X, iy, iw, NAV_H);
 			navHover[i] = Ui.approach(navHover[i], hover && !on ? 1f : 0f, 18f);
-			if (on) {
-				Ui.glow(g, NAV_X + 2, iy + NAV_H / 2f, 16, 16, Theme.alpha(c.highlight, 0.25f));
-				Ui.rect(g, NAV_X, iy, iw, NAV_H, 5.5f, Theme.alpha(Theme.mix(0xFF2C5A8C, c.highlight, 0.25f), 0.75f));
-				Ui.rect(g, NAV_X + 0.5f, iy + 0.5f, iw - 1, NAV_H - 1, 5f, 0xF0102238);
-				Ui.rect(g, NAV_X, iy + 3, 1.2f, NAV_H - 6, 0.6f, c.highlight);
-			} else if (navHover[i] > 0.01f) {
-				Ui.rect(g, NAV_X, iy, iw, NAV_H, 5.5f, Theme.alpha(0xFF1A2E4A, 0.6f * navHover[i]));
-			}
-			float iconX = NAV_X + 15.7f - (1 - expand) * (15.7f - iw / 2f);
-			Ui.icon(g, NAV_ICONS[i], iconX, iy + NAV_H / 2f, on ? c.text : 0xFFD2DDEA, Fonts.ICON_M);
+			if (navHover[i] > 0.01f) Ui.rect(g, NAV_X, iy, iw, NAV_H, 7, Theme.alpha(0xFFFFFFFF, 0.05f * navHover[i]));
+			float iconX = NAV_X + 14 - (1 - expand) * (NAV_X + 14 - w / 2f);
+			Ui.icon(g, NAV_ICONS[i], iconX, iy + NAV_H / 2f, on ? 0xFFFFFFFF : Theme.alpha(0xFFD2DEEE, 0.75f + 0.25f * navHover[i]), on ? Fonts.ICON_M_FILL : Fonts.ICON_M);
 			if (expand > 0.3f) {
 				int la = Math.round(255 * Math.min(1, (expand - 0.3f) / 0.7f));
-				Ui.textMid(g, NAV_LABELS[i], NAV_X + 31.7f, iy + NAV_H / 2f, Draw.alpha(on ? c.text : 0xFFD2DDEA, la), Fonts.BODY);
+				Ui.textMid(g, NAV_LABELS[i], NAV_X + 28, iy + NAV_H / 2f, Draw.alpha(on ? 0xFFFFFFFF : 0xFFC9D6E8, la), on ? Fonts.BOLD : Fonts.BODY);
 			}
 		}
 
-		// collapse / expand
-		float cx = collapsed ? w / 2f : 19, cy = DH - 18;
-		boolean ch = Ui.inside(mx, my, cx - 8, cy - 8, 16, 16);
-		if (ch) Ui.circle(g, cx, cy, 8, Theme.alpha(0xFF1A2E4A, 0.8f));
-		Ui.icon(g, collapsed ? Icon.CHEVRON_RIGHT : Icon.CHEVRON_LEFT, cx, cy, ch ? c.text : 0xFFC4D2E4, Fonts.ICON_M);
+		// account
+		if (expand > 0.2f) {
+			float ay = DH - 44;
+			int a = Math.round(255 * expand);
+			Ui.rect(g, NAV_X, ay, iw, 30, 8, Draw.alpha(0xFF0A162E, Math.round(a * 0.85f)));
+			Ui.ring(g, NAV_X, ay, iw, 30, 8, Draw.alpha(0xFFA0C8FF, Math.round(a * 0.12f)), 1f);
+			g.playerHead(p().userId(), p().userName(), NAV_X + 6, ay + 6, 18);
+			String name = p().userName() == null ? "Player" : p().userName();
+			Ui.textMid(g, Fonts.ellipsize(name, Fonts.BOLD, Math.round(iw - 34)), NAV_X + 29, ay + 11, Draw.alpha(0xFFFFFFFF, a), Fonts.BOLD);
+			Ui.textMid(g, "Polar Client " + Polar.version(), NAV_X + 29, ay + 21, Draw.alpha(0xFFB9C9DE, a), Fonts.SMALL);
+		}
+
+		// fold / unfold
+		float[] cb = collapseButton();
+		boolean ch = Ui.inside(mx, my, cb[0] - 8, cb[1] - 8, 16, 16);
+		if (ch) Ui.circle(g, cb[0], cb[1], 8, 0x12FFFFFF);
+		if (expand > 0.5f || collapsed) Ui.icon(g, collapsed ? Icon.CHEVRON_RIGHT : Icon.CHEVRON_LEFT, cb[0], cb[1], 0xFF9FB3CE, Fonts.ICON_M);
 	}
 
-	private void drawBanner(Gfx g, Pal c) {
-		float x = contentX(), w = DW - x;
-		// the texture is 8:1; keep it anchored to the right so the moon and peaks stay put when the sidebar folds
-		float tw = BANNER_H * 8f;
-		float u0 = Math.max(0, 1 - w / tw);
-		g.blit(BANNER, x, 1, w, BANNER_H - 1, u0, 0, 1, 1, 0xFFFFFFFF);
-		Ui.hline(g, x, BANNER_H, w, 1, c.line);
+	/** Centre of the fold button: top right of the sidebar, or at the bottom when folded. */
+	private float[] collapseButton() {
+		return collapsed ? new float[]{side / 2f, DH - 14} : new float[]{side - 14, 24};
 	}
 
 	private void drawHeader(Gfx g, String title, String subtitle, Pal c) {
-		Ui.text(g, title, contentX() + 14, 20, c.text, Fonts.TITLE);
-		if (subtitle != null) Ui.text(g, subtitle, contentX() + 14, 37, c.muted, Fonts.SMALL);
+		float x = contentX() + PAD;
+		Ui.textMid(g, title, x, 22, c.text, Fonts.TITLE);
+		if (subtitle != null) Ui.textMid(g, subtitle, x, 36, 0xFF93A8C6, Fonts.SMALL);
+	}
+
+	private float[] searchBox() {
+		return new float[]{DW - PAD - 150, 14, 150, 20};
 	}
 
 	private void drawSearch(Gfx g, float mx, float my, Pal c) {
-		float sw = 117, sh = 18.7f, sx = DW - 13 - sw, sy = 22.3f;
+		float[] b = searchBox();
+		float sx = b[0], sy = b[1], sw = b[2], sh = b[3];
 		boolean focused = search.focused();
 		boolean hover = Ui.inside(mx, my, sx, sy, sw, sh);
-		Ui.rect(g, sx, sy, sw, sh, sh / 2f, focused ? c.highlight : hover ? Theme.mix(c.cardBorder, c.highlight, 0.3f) : c.cardBorder);
-		Ui.rect(g, sx + 0.6f, sy + 0.6f, sw - 1.2f, sh - 1.2f, sh / 2f - 0.6f, 0xEE061226);
-		Ui.icon(g, Icon.SEARCH, sx + 11, sy + sh / 2f, focused ? c.highlight : 0xFFB5C4D6, Fonts.ICON_M);
-		if (search.value().isEmpty() && !focused) Ui.textMid(g, "Search mods...", sx + 20, sy + sh / 2f, 0xFFA8B8CC, Fonts.BODY);
+		if (focused) Ui.glow(g, sx + sw / 2f, sy + sh / 2f, sw * 0.6f, 14, 0x145AD8FF);
+		Ui.rect(g, sx, sy, sw, sh, sh / 2f, 0xCC040A18);
+		Ui.ring(g, sx, sy, sw, sh, sh / 2f, focused ? 0xE65AD8FF : hover ? 0x54A0C8FF : 0x2EA0C8FF, 1.2f);
+		Ui.icon(g, Icon.SEARCH, sx + 11, sy + sh / 2f, focused ? ACCENT : 0xFF9FB3CE, Fonts.ICON_S);
+		if (search.value().isEmpty() && !focused) {
+			Ui.textMid(g, "Search mods", sx + 20, sy + sh / 2f, 0xFF7F93B0, Fonts.BODY);
+			Ui.ring(g, sx + sw - 18, sy + 5, 11, 10, 3, 0x4DA0C8FF, 1f);
+			Ui.textCentered(g, "/", sx + sw - 12.5f, sy + 10, 0xFF8FA6C8, Fonts.SMALL);
+		}
 		search.visible = true;
-		search.setBounds(Math.round(sx + 20), Math.round(sy + 5.5f), Math.round(sw - 28));
+		search.setBounds(Math.round(sx + 20), Math.round(sy + 6), Math.round(sw - 28));
 		search.render(g);
 	}
 
 	private void drawSwitch(Gfx g, float x, float y, float onF, boolean hover, Pal c) {
-		int track = Theme.lerp(0xFF222C3D, c.switchOn, onF);
-		if (onF > 0.5f) Ui.glow(g, x + SW_W / 2f, y + SW_H / 2f, SW_W * 0.9f, SW_H * 1.2f, Theme.alpha(c.switchOn, 0.35f * onF));
-		Ui.rect(g, x, y, SW_W, SW_H, SW_H / 2f, Theme.lerp(0xFF3A4760, Theme.mix(c.switchOn, 0xFFFFFFFF, 0.15f), onF));
-		Ui.rect(g, x + 0.6f, y + 0.6f, SW_W - 1.2f, SW_H - 1.2f, SW_H / 2f - 0.6f, hover ? Theme.mix(track, 0xFFFFFFFF, 0.06f) : track);
-		float kr = SW_H / 2f - 1.6f;
+		if (onF > 0.5f) Ui.glow(g, x + SW_W / 2f, y + SW_H / 2f, 16, 9, Theme.alpha(ACCENT, 0.25f * onF));
+		int track = Theme.lerp(0xE6283650, 0xFF46BEEB, onF);
+		Ui.rect(g, x, y, SW_W, SW_H, SW_H / 2f, track);
+		Ui.ring(g, x, y, SW_W, SW_H, SW_H / 2f, Theme.alpha(0xFFFFFFFF, hover ? 0.22f : 0.12f), 0.8f);
 		float kx = x + SW_H / 2f + (SW_W - SW_H) * onF;
-		Ui.circle(g, kx, y + SW_H / 2f, kr, Theme.lerp(0xFF7C8AA3, 0xFFF0F5FB, onF));
+		Ui.circle(g, kx, y + SW_H / 2f + 0.4f, SW_H / 2f - 1.2f, 0x40000000);
+		Ui.circle(g, kx, y + SW_H / 2f, SW_H / 2f - 1.4f, Theme.lerp(0xFFAEBBD0, 0xFFFFFFFF, onF));
 	}
 
 	// ------------------------------------------------------------------ Mods page
 
+	private int toggleableCount() {
+		int n = 0;
+		for (Module m : Polar.modules().all()) if (m != Polar.modules().client) n++;
+		return n;
+	}
+
+	/** The "Only on" switch left of the search box: {x, y, w, h}. */
+	private float[] onlyOnBox() {
+		float w = Fonts.width("Only on", Fonts.BODY) + 30;
+		return new float[]{searchBox()[0] - 12 - w, 14, w, 20};
+	}
+
 	private void drawMods(Gfx g, float mx, float my, Pal c, Theme t) {
-		drawHeader(g, "Mods", "Customize your gameplay with built-in mods.", c);
+		drawHeader(g, "Mods", toggleableCount() + " built in, " + enabledCount() + " on", c);
 		drawSearch(g, mx, my, c);
+		float[] ob = onlyOnBox();
+		boolean oh = Ui.inside(mx, my, ob[0], ob[1], ob[2], ob[3]);
+		Ui.textMid(g, "Only on", ob[0], ob[1] + ob[3] / 2f, oh ? 0xFFFFFFFF : 0xFFC9D6E8, Fonts.BODY);
+		drawSwitch(g, ob[0] + ob[2] - 21, ob[1] + 4.5f, onlyEnabled ? 1 : 0, oh, c);
 		drawChips(g, mx, my, c);
 
-		// "Enabled (n)" switch: shows only the mods that are on
-		float swX = DW - 13 - SW_W, swY = CHIP_Y + (CHIP_H - SW_H) / 2f;
-		String label = "Enabled (" + enabledCount() + ")";
-		Ui.textRight(g, label, swX - 5, CHIP_Y + CHIP_H / 2f, 0xFFD5DFEB, Fonts.BODY);
-		drawSwitch(g, swX, swY, onlyEnabled ? 1 : 0, Ui.inside(mx, my, swX, swY, SW_W, SW_H), c);
-
-		scroll = Ui.approach(scroll, scrollTarget, 18f);
+		scroll = Ui.approach(scroll, scrollTarget, 14f);
 		float top = GRID_Y, bottom = gridBottom();
 		boolean mouseInGrid = Ui.inside(mx, my, contentX(), top - 3, contentW(), bottom - top + 3);
-		g.scissor(Math.round(contentX()) + 1, Math.round(top - 3), Math.round(DW) - 1, Math.round(gridBottom()) + 2);
+		g.scissor(Math.round(contentX()) + 1, Math.round(top - 6), Math.round(DW) - 1, Math.round(bottom));
 		List<Module> mods = visibleModules();
 		int cols = columns();
 		float cw = cardW(), sx = gridX();
 		hovered = null;
 		if (mods.isEmpty()) {
-			String msg = onlyEnabled ? "No mods are switched on here" : favoritesOnly ? "Star a mod to pin it here" : "No mods match your search";
-			Ui.textCentered(g, msg, contentX() + contentW() / 2f, top + 30, c.muted, Fonts.BODY);
+			float cx = contentX() + contentW() / 2f;
+			Ui.icon(g, Icon.SEARCH, cx, top + 50, 0xFF5E7290, Fonts.ICON_L);
+			String msg = onlyEnabled ? "None of these mods are on" : favoritesOnly ? "Star a mod to pin it here" : "No mods match \u201C" + search.value() + "\u201D";
+			Ui.textCentered(g, msg, cx, top + 72, c.muted, Fonts.BODY);
+			if (!search.value().isEmpty()) Ui.textCentered(g, "Press Esc to clear the search", cx, top + 84, c.dim, Fonts.SMALL);
 		}
+		java.util.Set<Module> shown = new java.util.HashSet<Module>();
 		for (int i = 0; i < mods.size(); i++) {
 			Module m = mods.get(i);
-			float x = sx + (i % cols) * (cw + CARD_GAP_X);
-			float y = top + (i / cols) * (CARD_H + CARD_GAP_Y) - scroll;
-			if (y + CARD_H < top - 4 || y > bottom + 6) continue;
+			shown.add(m);
+			float tx = sx + (i % cols) * (cw + CARD_GAP_X);
+			float ty = top + (i / cols) * (CARD_H + CARD_GAP_Y) - scroll;
+			// cards glide to their new place when the list changes, and fade in when they appear
+			float[] pos = cardPos.get(m);
+			if (pos == null) {
+				pos = new float[]{tx, ty + 8, 0};
+				cardPos.put(m, pos);
+			}
+			pos[0] = Ui.approach(pos[0], tx, 14f);
+			pos[1] = Ui.approach(pos[1], ty, 14f);
+			pos[2] = Ui.approach(pos[2], 1f, 12f);
+			float x = pos[0], y = pos[1];
+			if (y + CARD_H < top - 8 || y > bottom + 8) continue;
 			boolean hover = mouseInGrid && Ui.inside(mx, my, x, y, cw, CARD_H);
 			if (hover) hovered = m;
-			drawCard(g, m, x, y, cw, hover, mx, my, c);
+			drawCard(g, m, x, y, cw, pos[2], hover, mx, my, c);
 		}
+		cardPos.keySet().retainAll(shown);
 		g.endScissor();
 		float max = maxScroll();
+		if (scroll > 1) g.gradient(Math.round(contentX()) + 1, Math.round(top - 6), Math.round(DW) - 1, Math.round(top + 4), 0xFF081124, 0x00081124);
+		if (scroll < max - 1) g.gradient(Math.round(contentX()) + 1, Math.round(bottom - 12), Math.round(DW) - 1, Math.round(bottom + 2), 0x00081124, 0xF2081124);
 		if (max > 0) {
-			float h = bottom - top, thumb = Math.max(16, h * h / (h + max));
-			Ui.rect(g, DW - 4.2f, top + (h - thumb) * (scroll / max), 1.6f, thumb, 0.8f, Theme.alpha(0xFF9FB8D8, 0.35f));
+			float h = bottom - top, thumb = Math.max(20, h * h / (h + max));
+			Ui.rect(g, DW - 6, top + (h - thumb) * (scroll / max), 2, thumb, 1, Theme.alpha(0xFFA0C8FF, mouseInGrid ? 0.5f : 0.25f));
 		}
 	}
 
@@ -498,11 +557,25 @@ public class PolarMenuView extends View {
 		out.add(new Chip("All", null, null, false));
 		out.add(new Chip("Favorites", Icon.STAR, null, true));
 		for (Category cat : Category.values()) {
-			boolean any = false;
-			for (Module m : Polar.modules().all()) if (m.category() == cat && m != Polar.modules().client) any = true;
-			if (any) out.add(new Chip(cat.label, null, cat, false));
+			if (chipCount(cat, false) > 0) out.add(new Chip(cat.label, null, cat, false));
 		}
 		return out;
+	}
+
+	private int chipCount(Category cat, boolean favorites) {
+		ClientData data = Polar.config() == null ? null : Polar.config().data();
+		int n = 0;
+		for (Module m : Polar.modules().all()) {
+			if (m == Polar.modules().client) continue;
+			if (favorites) {
+				if (data != null && data.isFavorite(m.id())) n++;
+			} else if (cat == null || m.category() == cat) n++;
+		}
+		return n;
+	}
+
+	private int chipCount(Chip chip) {
+		return chipCount(chip.category, chip.favorites);
 	}
 
 	private boolean selected(Chip chip) {
@@ -510,68 +583,84 @@ public class PolarMenuView extends View {
 	}
 
 	private float chipW(Chip chip) {
-		float w = Fonts.width(chip.label, Fonts.BODY) + 20;
-		if (selected(chip) || chip.icon != null) w += 9;
-		return Math.max(w, 34);
+		return 18 + (chip.icon != null ? 11 : 0) + Fonts.width(chip.label, Fonts.BODY) + 5 + Fonts.width(String.valueOf(chipCount(chip)), Fonts.SMALL);
 	}
 
 	private float chipsRight() {
-		return DW - 13 - SW_W - 5 - Fonts.width("Enabled (" + enabledCount() + ")", Fonts.BODY) - 10;
+		return DW - PAD;
 	}
 
 	private void drawChips(Gfx g, float mx, float my, Pal c) {
 		float left = gridX(), right = chipsRight();
 		List<Chip> chips = chips();
 		float total = 0;
-		for (Chip chip : chips) total += chipW(chip) + 4;
-		chipContentW = total - 4;
+		for (Chip chip : chips) total += chipW(chip) + 5;
+		chipContentW = total - 5;
 		float maxS = Math.max(0, chipContentW - (right - left));
 		chipScrollTarget = Math.max(0, Math.min(maxS, chipScrollTarget));
-		chipScroll = Ui.approach(chipScroll, chipScrollTarget, 18f);
-		g.scissor(Math.round(left) - 4, Math.round(CHIP_Y - 4), Math.round(right), Math.round(CHIP_Y + CHIP_H + 4));
-		float x = left - chipScroll;
+		chipScroll = Ui.approach(chipScroll, chipScrollTarget, 16f);
+		g.scissor(Math.round(left) - 2, Math.round(CHIP_Y - 4), Math.round(right) + 2, Math.round(CHIP_Y + CHIP_H + 4));
+		float mid = CHIP_Y + CHIP_H / 2f;
+		// chip backs, then the sliding pill under the selected one, then the labels
+		float x = left - chipScroll, selX = 0, selW = 0;
+		for (Chip chip : chips) {
+			float w = chipW(chip);
+			Ui.rect(g, x, CHIP_Y, w, CHIP_H, CHIP_H / 2f, 0xBF0C1A32);
+			Ui.ring(g, x, CHIP_Y, w, CHIP_H, CHIP_H / 2f, 0x24A0C8FF, 0.8f);
+			if (selected(chip)) {
+				selX = x;
+				selW = w;
+			}
+			x += w + 5;
+		}
+		if (pillX < 0) {
+			pillX = selX;
+			pillW = selW;
+		}
+		pillX = Ui.approach(pillX, selX, 16f);
+		pillW = Ui.approach(pillW, selW, 16f);
+		Ui.glow(g, pillX + pillW / 2f, mid, pillW * 0.6f, CHIP_H, 0x1F5AD8FF);
+		Ui.gradientRect(g, pillX, CHIP_Y, pillW, CHIP_H, CHIP_H / 2f, 0xFF7FE2FF, 0xFF3FA9E8);
+		x = left - chipScroll;
 		for (Chip chip : chips) {
 			float w = chipW(chip);
 			boolean sel = selected(chip);
-			boolean hover = Ui.inside(mx, my, x, CHIP_Y, w, CHIP_H) && mx < right;
-			float mid = CHIP_Y + CHIP_H / 2f;
-			if (sel) {
-				Ui.glow(g, x + w / 2f, mid, w * 0.7f, CHIP_H, Theme.alpha(c.chip, 0.30f));
-				Ui.gradientRect(g, x, CHIP_Y, w, CHIP_H, CHIP_H / 2f, Theme.mix(c.chip, 0xFFFFFFFF, 0.12f), Theme.mix(c.chip, 0xFF2A7BD8, 0.25f));
-				Ui.icon(g, chip.icon != null ? chip.icon : Icon.CHECK, x + 11, mid, 0xFFFFFFFF, chip.icon != null ? Fonts.ICON_M_FILL : Fonts.ICON_M);
-				Ui.textMid(g, chip.label, x + 19, mid, 0xFFFFFFFF, Fonts.BODY);
-			} else {
-				Ui.rect(g, x, CHIP_Y, w, CHIP_H, CHIP_H / 2f, hover ? Theme.mix(c.cardBorder, c.highlight, 0.35f) : 0xFF162A44);
-				Ui.rect(g, x + 0.6f, CHIP_Y + 0.6f, w - 1.2f, CHIP_H - 1.2f, CHIP_H / 2f - 0.6f, hover ? 0xFF13243C : 0xFF0D1C32);
-				float tx = x + 10;
-				if (chip.icon != null) {
-					Ui.icon(g, chip.icon, x + 11, mid, 0xFFFFD36B, Fonts.ICON_M);
-					tx = x + 19;
-				}
-				Ui.textMid(g, chip.label, tx, mid, 0xFFD3DEEA, Fonts.BODY);
+			boolean hover = !sel && Ui.inside(mx, my, x, CHIP_Y, w, CHIP_H) && mx < right;
+			if (hover) Ui.rect(g, x, CHIP_Y, w, CHIP_H, CHIP_H / 2f, 0x0FFFFFFF);
+			float tx = x + 9;
+			if (chip.icon != null) {
+				g.push();
+				g.translate(tx + 4, mid);
+				g.scale(0.75f);
+				Ui.icon(g, chip.icon, 0, 0, sel ? 0xFF06243A : 0xFFFFD36B, Fonts.ICON_M_FILL);
+				g.pop();
+				tx += 11;
 			}
-			x += w + 4;
+			Ui.textMid(g, chip.label, tx, mid, sel ? 0xFF05203A : 0xFFD6E1EF, Fonts.BODY);
+			Ui.textMid(g, String.valueOf(chipCount(chip)), tx + Fonts.width(chip.label, Fonts.BODY) + 5, mid + 0.3f, sel ? 0xB305203A : 0xFF7F93B0, Fonts.SMALL);
+			x += w + 5;
 		}
 		g.endScissor();
 		if (maxS > 0) {
-			// fade + arrow buttons where the chips continue
-			float mid = CHIP_Y + CHIP_H / 2f;
-			if (chipScroll < maxS - 0.5f) {
-				Ui.hGradient(g, right - 34, CHIP_Y - 1, 20, CHIP_H + 2, 0x00071429, 0xFF071429);
-				Ui.rect(g, right - 14, CHIP_Y - 1, 14, CHIP_H + 2, 0, 0xFF071429);
-				Ui.circle(g, right - 7, mid, 7, 0xFF13243C);
-				Ui.icon(g, Icon.CHEVRON_RIGHT, right - 7, mid, 0xFFE2EAF4, Fonts.ICON_M);
+			if (chipScroll < maxS - 1) {
+				Ui.hGradient(g, right - 30, CHIP_Y - 2, 32, CHIP_H + 4, 0x00081124, 0xFF081124);
+				arrow(g, right - 8, mid, Icon.CHEVRON_RIGHT, mx, my);
 			}
-			if (chipScroll > 0.5f) {
-				Ui.rect(g, left - 4, CHIP_Y - 1, 18, CHIP_H + 2, 0, 0xFF071429);
-				Ui.hGradient(g, left + 14, CHIP_Y - 1, 20, CHIP_H + 2, 0xFF071429, 0x00071429);
-				Ui.circle(g, left + 5, mid, 7, 0xFF13243C);
-				Ui.icon(g, Icon.CHEVRON_LEFT, left + 5, mid, 0xFFE2EAF4, Fonts.ICON_M);
+			if (chipScroll > 1) {
+				Ui.hGradient(g, left - 2, CHIP_Y - 2, 32, CHIP_H + 4, 0xFF081124, 0x00081124);
+				arrow(g, left + 8, mid, Icon.CHEVRON_LEFT, mx, my);
 			}
 		}
 	}
 
-	private void drawCard(Gfx g, Module m, float x, float y, float w, boolean hover, float mx, float my, Pal c) {
+	private void arrow(Gfx g, float x, float y, String icon, float mx, float my) {
+		boolean hv = Ui.inside(mx, my, x - 7, y - 7, 14, 14);
+		Ui.circle(g, x, y, 7, hv ? 0xFF1E3C64 : 0xFF122442);
+		Ui.ring(g, x - 7, y - 7, 14, 14, 7, 0x4DA0C8FF, 0.8f);
+		Ui.icon(g, icon, x, y, 0xFFE2EAF4, Fonts.ICON_S);
+	}
+
+	private void drawCard(Gfx g, Module m, float x, float y, float w, float alpha, boolean hover, float mx, float my, Pal c) {
 		Float prevHover = hoverAnim.get(m);
 		float hv = Ui.approach(prevHover == null ? 0f : prevHover, hover ? 1f : 0f, 16f);
 		hoverAnim.put(m, hv);
@@ -582,48 +671,55 @@ public class PolarMenuView extends View {
 		String why = m.unavailableReason();
 		ClientData data = Polar.config() == null ? null : Polar.config().data();
 		boolean fav = data != null && data.isFavorite(m.id());
+		int tint = tint(m.category());
+		float a = alpha;
 
-		if (hv > 0.02f) {
-			Ui.glow(g, x + w / 2f, y + CARD_H / 2f, w * 0.62f, CARD_H * 0.75f, Theme.alpha(c.highlight, 0.16f * hv));
-		}
-		int border = Theme.lerp(c.cardBorder, c.highlight, hv);
-		Ui.rect(g, x, y, w, CARD_H, 6.4f, border);
-		float bt = hv > 0.5f ? 1.3f : 0.65f;
-		Ui.rect(g, x + bt, y + bt, w - 2 * bt, CARD_H - 2 * bt, 6.4f - bt, Theme.lerp(0xF0081931, 0xF00A1E3A, hv));
+		g.push();
+		g.translate(0, -hv * 1.2f + (1 - a) * 6);
+		// lift: a soft shadow under the hovered card
+		if (hv > 0.02f) Ui.glow(g, x + w / 2f, y + CARD_H / 2f + 5, w * 0.6f, CARD_H * 0.7f, Theme.alpha(0xFF000000, 0.3f * hv * a));
+		Ui.gradientRect(g, x, y, w, CARD_H, 9, Theme.alpha(Theme.lerp(0xFF10203C, 0xFF182E52, hv), 0.85f * a),
+			Theme.alpha(Theme.lerp(0xFF0A162C, 0xFF10203E, hv), 0.85f * a));
+		int edge = onF > 0.5f ? Theme.alpha(ACCENT, (0.35f + 0.35f * hv) * a) : Theme.alpha(0xFFA0C8FF, (0.13f + 0.25f * hv) * a);
+		Ui.ring(g, x, y, w, CARD_H, 9, edge, 1f);
+		Ui.gradientRect(g, x + 1, y + 1, w - 2, 10, 8, Theme.alpha(0xFFFFFFFF, 0.05f * a), 0x00FFFFFF);
+
+		// icon tile in the category's colour, brighter when the mod is on
+		float ix = x + 10, iy = y + 10, is = 22;
+		Ui.gradientRect(g, ix, iy, is, is, 6.5f, Theme.alpha(tint, (0.18f + 0.22f * onF) * a), Theme.alpha(tint, (0.06f + 0.1f * onF) * a));
+		Ui.ring(g, ix, iy, is, is, 6.5f, Theme.alpha(tint, (0.25f + 0.35f * onF) * a), 0.8f);
+		if (onF > 0.3f) Ui.glow(g, ix + is / 2f, iy + is / 2f, 16, 16, Theme.alpha(tint, 0.16f * onF * a));
+		Ui.icon(g, Icons.of(m), ix + is / 2f, iy + is / 2f, Theme.alpha(onF > 0.5f ? 0xFFFFFFFF : tint, (onF > 0.5f ? 1f : 0.85f) * a),
+			onF > 0.5f ? Fonts.ICON_M_FILL : Fonts.ICON_M);
 
 		int fg = why != null ? c.dim : c.text;
-		g.push();
-		g.translate(x + 16.7f, y + 15.1f);
-		g.scale(0.68f);
-		Ui.icon(g, Icons.of(m), 0, 0, fg, Fonts.ICON_L);
-		g.pop();
+		Ui.textMid(g, Fonts.ellipsize(m.name(), Fonts.BOLD, Math.round(w - is - 18 - 34)), ix + is + 8, y + 16, Theme.alpha(fg, a), Fonts.BOLD);
+		Ui.textMid(g, m.category().label, ix + is + 8, y + 26, Theme.alpha(tint, 0.85f * a), Fonts.SMALL);
+		String desc = why != null ? why : m.description();
+		List<String> lines = wrap(desc, Fonts.SMALL, w - 52, 2);
+		for (int i = 0; i < lines.size(); i++) {
+			Ui.textMid(g, lines.get(i), x + 10, y + 42 + i * 8.6f, Theme.alpha(why != null ? c.dim : 0xFF93A8C6, a), Fonts.SMALL);
+		}
+		if (m.canToggle() && why == null) {
+			float swx = x + w - 30, swy = y + 41;
+			drawSwitch(g, swx, swy, onF, hover && Ui.inside(mx, my, swx - 3, swy - 3, 26, 17), c);
+		}
 
-		// gear (settings) and star (favourite)
-		float gx = x + w - 11.5f, gy = y + 10.4f;
+		// settings (gear) and favourite (star)
+		float gx = x + w - 12, gy = y + 13, stX = gx - 14;
 		boolean gearHover = hover && Ui.inside(mx, my, gx - 6, gy - 6, 12, 12);
-		Ui.icon(g, Icon.SETTINGS, gx, gy, gearHover ? c.text : 0xFFA4B3C7, Fonts.ICON_S);
-		float stX = gx - 12;
+		Ui.icon(g, Icon.SETTINGS, gx, gy, Theme.alpha(gearHover ? 0xFFFFFFFF : 0xFF8CA0BE, (0.45f + 0.55f * Math.max(hv, gearHover ? 1 : 0)) * a), Fonts.ICON_S);
 		boolean starHover = hover && Ui.inside(mx, my, stX - 6, gy - 6, 12, 12);
 		if (fav) {
 			g.push();
 			g.translate(stX, gy);
 			g.scale(0.75f);
-			Ui.icon(g, Icon.STAR, 0, 0, 0xFFFFD36B, Fonts.ICON_M_FILL);
+			Ui.icon(g, Icon.STAR, 0, 0, Theme.alpha(0xFFFFD36B, a), Fonts.ICON_M_FILL);
 			g.pop();
-		} else if (hv > 0.05f) {
-			Ui.icon(g, Icon.STAR, stX, gy, Theme.alpha(starHover ? 0xFFFFD36B : 0xFFA4B3C7, hv), Fonts.ICON_S);
+		} else if (hv > 0.02f) {
+			Ui.icon(g, Icon.STAR, stX, gy, Theme.alpha(0xFFFFD36B, (starHover ? 0.9f : 0.45f) * hv * a), Fonts.ICON_S);
 		}
-
-		Ui.text(g, Fonts.ellipsize(m.name(), Fonts.BOLD, Math.round(w - 14)), x + 7.6f, y + 30.3f, fg, Fonts.BOLD);
-		String desc = why != null ? why : m.description();
-		List<String> lines = wrap(desc, Fonts.SMALL, w - 7.6f - SW_W - 10, 2);
-		for (int i = 0; i < lines.size(); i++) {
-			Ui.text(g, lines.get(i), x + 7.6f, y + 40.7f + i * 7.9f, why != null ? c.dim : c.muted, Fonts.SMALL);
-		}
-		if (m.canToggle() && why == null) {
-			float swx = x + w - 7 - SW_W, swy = y + 43;
-			drawSwitch(g, swx, swy, onF, hover && Ui.inside(mx, my, swx, swy, SW_W, SW_H), c);
-		}
+		g.pop();
 	}
 
 	/** Word-wraps text to at most {@code maxLines} lines (the last one gets "..." if it doesn't fit). */
@@ -652,33 +748,55 @@ public class PolarMenuView extends View {
 
 	// ------------------------------------------------------------------ settings pages
 
-	private void drawModuleSettings(Gfx g, float mx, float my, Pal c, Theme t) {
-		Module m = moduleSettings.module();
-		float x0 = contentX() + 14;
-		boolean backHover = Ui.inside(mx, my, x0 - 3, 19, 16, 16);
-		if (backHover) Ui.circle(g, x0 + 5, 27, 8, Theme.alpha(0xFF1A2E4A, 0.8f));
-		Ui.icon(g, Icon.BACK, x0 + 5, 27, c.text, Fonts.ICON_M);
-		Ui.text(g, m.name(), x0 + 16, 20, c.text, Fonts.TITLE);
-		String why = m.unavailableReason();
-		Ui.text(g, why != null ? why : m.description(), x0 + 16, 37, why != null ? c.dim : c.muted, Fonts.SMALL);
+	/** The settings drawer: slides in from the right over the cards. */
+	private float drawerX() {
+		return DW - DRAWER_W * Ui.easeOut(drawerK);
+	}
 
-		float right = DW - 13;
-		boolean resetHover = Ui.inside(mx, my, right - 16, 19, 16, 16);
-		Ui.rect(g, right - 16, 19, 16, 16, 8, resetHover ? 0xFF1C3352 : 0xCC0D1C32);
-		Ui.icon(g, Icon.RESET, right - 8, 27, c.text, Fonts.ICON_M);
+	private void drawDrawer(Gfx g, float mx, float my, Pal c, Theme t) {
+		Module m = drawerModule;
+		float k = drawerK, x = drawerX(), w = DRAWER_W, P = x + 16, rw = w - 32;
+		g.fill(Math.round(contentX()), 0, Math.round(DW), Math.round(DH), Theme.alpha(0xFF020610, 0.45f * k));
+		for (int i = 1; i <= 4; i++) g.fill(Math.round(x - i * 3), 0, Math.round(x - (i - 1) * 3), Math.round(DH), Theme.alpha(0xFF000000, 0.08f * (5 - i) / 4f * k));
+		Ui.rect(g, x, 0, w + R, DH, 0, R, R, 0, 0xFF091328);
+		Ui.vline(g, x, 0, DH, 1, 0x40A0D7FF);
+		int tint = tint(m.category());
+		Ui.gradientRect(g, P, 16, 28, 28, 8, Theme.alpha(tint, 0.35f), Theme.alpha(tint, 0.1f));
+		Ui.icon(g, Icons.of(m), P + 14, 30, 0xFFFFFFFF, Fonts.ICON_M_FILL);
+		Ui.textMid(g, Fonts.ellipsize(m.name(), Fonts.LARGE, Math.round(rw - 56)), P + 36, 25, c.text, Fonts.LARGE);
+		Ui.textMid(g, m.category().label, P + 36, 37, Theme.alpha(tint, 0.9f), Fonts.SMALL);
 		ClientData data = Polar.config() == null ? null : Polar.config().data();
 		boolean fav = data != null && data.isFavorite(m.id());
-		boolean starHover = Ui.inside(mx, my, right - 36, 19, 16, 16);
-		Ui.rect(g, right - 36, 19, 16, 16, 8, starHover ? 0xFF1C3352 : 0xCC0D1C32);
-		Ui.icon(g, Icon.STAR, right - 28, 27, fav ? 0xFFFFD36B : c.text, fav ? Fonts.ICON_M_FILL : Fonts.ICON_M);
+		float cx = x + w - 18;
+		boolean closeHover = Ui.inside(mx, my, cx - 8, 14, 16, 16), starHover = Ui.inside(mx, my, cx - 26, 14, 16, 16);
+		Ui.circle(g, cx, 22, 8, closeHover ? 0x1FFFFFFF : 0x0AFFFFFF);
+		Ui.icon(g, Icon.CLOSE, cx, 22, 0xFFC9D6E8, Fonts.ICON_S);
+		Ui.circle(g, cx - 18, 22, 8, starHover ? 0x1FFFFFFF : 0x0AFFFFFF);
+		Ui.icon(g, Icon.STAR, cx - 18, 22, fav ? 0xFFFFD36B : 0xFFC9D6E8, Fonts.ICON_S);
+		String why = m.unavailableReason();
+		List<String> dl = wrap(why != null ? why : m.description(), Fonts.SMALL, rw, 2);
+		for (int i = 0; i < dl.size(); i++) Ui.textMid(g, dl.get(i), P, 58 + i * 9, why != null ? c.dim : 0xFF93A8C6, Fonts.SMALL);
+		float ry = 78;
 		if (m.canToggle() && why == null) {
-			drawSwitch(g, right - 42 - SW_W, 27 - SW_H / 2f, m.isEnabled() ? 1 : 0, Ui.inside(mx, my, right - 42 - SW_W, 27 - SW_H / 2f, SW_W, SW_H), c);
+			Ui.rect(g, P, ry, rw, 26, 8, 0x125AD8FF);
+			Ui.ring(g, P, ry, rw, 26, 8, 0x405AD8FF, 1f);
+			Ui.textMid(g, "Enabled", P + 10, ry + 13, 0xFFFFFFFF, Fonts.BOLD);
+			drawSwitch(g, P + rw - 30, ry + 7.5f, m.isEnabled() ? 1 : 0, Ui.inside(mx, my, P, ry, rw, 26), c);
+			ry += 38;
 		}
+		float resetW = Fonts.width("Reset", Fonts.SMALL) + 20;
+		boolean resetHover = Ui.inside(mx, my, P + rw - resetW, ry - 6, resetW, 13);
+		Ui.textMid(g, "Settings", P, ry, 0xFFC9D6E8, Fonts.BOLD);
+		if (!m.settings().isEmpty()) {
+			Ui.icon(g, Icon.RESET, P + rw - resetW + 6, ry, resetHover ? 0xFFFFFFFF : 0xFF8FA6C8, Fonts.ICON_S);
+			Ui.textMid(g, "Reset", P + rw - resetW + 13, ry, resetHover ? 0xFFFFFFFF : 0xFF8FA6C8, Fonts.SMALL);
+		}
+		ry += 10;
 		if (m.settings().isEmpty()) {
-			Ui.textCentered(g, "This mod has no settings.", contentX() + contentW() / 2f, 110, c.muted, Fonts.BODY);
-			return;
+			Ui.textMid(g, "This mod has no settings.", P, ry + 8, c.muted, Fonts.SMALL);
+		} else if (moduleSettings != null) {
+			moduleSettings.render(g, P - 4, ry, rw + 8, DH - ry - 10, Math.round(mx), Math.round(my), t);
 		}
-		moduleSettings.render(g, contentX() + 14, BANNER_H + 8, contentW() - 28, DH - BANNER_H - 14, Math.round(mx), Math.round(my), t);
 	}
 
 	private void drawClientSettings(Gfx g, float mx, float my, Pal c, Theme t) {
@@ -839,14 +957,20 @@ public class PolarMenuView extends View {
 					return true;
 				}
 			}
-			float cx = collapsed ? side / 2f : 19, cy = DH - 18;
-			if (Ui.inside(mx, my, cx - 8, cy - 8, 16, 16)) {
+			float[] cb = collapseButton();
+			if (Ui.inside(mx, my, cb[0] - 8, cb[1] - 8, 16, 16)) {
 				collapsed = !collapsed;
 				return true;
 			}
 			return true;
 		}
-		if (moduleSettings != null) return clickModuleSettings(mx, my, button);
+		if (moduleSettings != null) {
+			if (mx < drawerX()) {
+				closeModule();
+				return true;
+			}
+			return clickModuleSettings(mx, my, button);
+		}
 		if (page == Page.MODS) return clickMods(mx, my, button);
 		if (page == Page.SETTINGS && clientSettings != null) return clientSettings.mouseClicked(mx, my, button);
 		if (page == Page.COSMETICS) return clickCosmetics(mx, my);
@@ -860,46 +984,52 @@ public class PolarMenuView extends View {
 
 	private boolean clickModuleSettings(float mx, float my, int button) {
 		Module m = moduleSettings.module();
-		float x0 = contentX() + 14, right = DW - 13;
-		if (Ui.inside(mx, my, x0 - 3, 19, 16, 16)) {
+		float x = drawerX(), P = x + 16, rw = DRAWER_W - 32, cx = x + DRAWER_W - 18;
+		if (Ui.inside(mx, my, cx - 8, 14, 16, 16)) {
 			closeModule();
 			return true;
 		}
-		if (Ui.inside(mx, my, right - 16, 19, 16, 16)) {
-			m.resetSettings();
-			moduleSettings.refreshTextBoxes();
-			showToast(m.name() + " settings reset");
-			return true;
-		}
-		if (Ui.inside(mx, my, right - 36, 19, 16, 16)) {
+		if (Ui.inside(mx, my, cx - 26, 14, 16, 16)) {
 			Polar.config().data().toggleFavorite(m.id());
 			return true;
 		}
-		if (m.canToggle() && m.unavailableReason() == null && Ui.inside(mx, my, right - 42 - SW_W, 27 - SW_H / 2f, SW_W, SW_H)) {
-			m.toggle();
+		float ry = 78;
+		if (m.canToggle() && m.unavailableReason() == null) {
+			if (Ui.inside(mx, my, P, ry, rw, 26)) {
+				m.toggle();
+				p().playClickSound();
+				return true;
+			}
+			ry += 38;
+		}
+		float resetW = Fonts.width("Reset", Fonts.SMALL) + 20;
+		if (!m.settings().isEmpty() && Ui.inside(mx, my, P + rw - resetW, ry - 6, resetW, 13)) {
+			m.resetSettings();
+			moduleSettings.refreshTextBoxes();
+			showToast(m.name() + " settings reset");
 			return true;
 		}
 		return moduleSettings.mouseClicked(mx, my, button);
 	}
 
 	private boolean clickMods(float mx, float my, int button) {
-		// Enabled switch
-		float swX = DW - 13 - SW_W, swY = CHIP_Y + (CHIP_H - SW_H) / 2f;
-		if (Ui.inside(mx, my, swX - Fonts.width("Enabled (" + enabledCount() + ")", Fonts.BODY) - 6, swY - 2, SW_W + 60, SW_H + 4) && mx > chipsRight()) {
+		float[] ob = onlyOnBox();
+		if (Ui.inside(mx, my, ob[0], ob[1], ob[2], ob[3])) {
 			onlyEnabled = !onlyEnabled;
 			scroll = scrollTarget = 0;
+			p().playClickSound();
 			return true;
 		}
-		// chips
 		float left = gridX(), right = chipsRight();
-		if (my >= CHIP_Y && my < CHIP_Y + CHIP_H && mx >= left - 4 && mx < right) {
+		if (my >= CHIP_Y && my < CHIP_Y + CHIP_H && mx >= left - 4 && mx < right + 2) {
 			if (chipContentW > right - left) {
-				if (mx > right - 16 && chipScroll < chipContentW - (right - left) - 0.5f) {
-					chipScrollTarget += 80;
+				float maxS = chipContentW - (right - left);
+				if (mx > right - 16 && chipScroll < maxS - 1) {
+					chipScrollTarget += 120;
 					return true;
 				}
-				if (mx < left + 14 && chipScroll > 0.5f) {
-					chipScrollTarget -= 80;
+				if (mx < left + 16 && chipScroll > 1) {
+					chipScrollTarget -= 120;
 					return true;
 				}
 			}
@@ -909,19 +1039,19 @@ public class PolarMenuView extends View {
 				if (mx >= x && mx < x + w) {
 					if (chip.favorites) {
 						favoritesOnly = !favoritesOnly;
-						filter = null;
 					} else {
 						favoritesOnly = false;
 						filter = chip.category;
 					}
 					scroll = scrollTarget = 0;
+					p().playClickSound();
 					return true;
 				}
-				x += w + 4;
+				x += w + 5;
 			}
 			return true;
 		}
-		// cards
+		// cards: click toggles, the gear (or right-click) opens settings, the star pins it
 		float top = GRID_Y, bottom = gridBottom();
 		if (!Ui.inside(mx, my, contentX(), top - 3, contentW(), bottom - top + 3)) return false;
 		List<Module> mods = visibleModules();
@@ -932,8 +1062,8 @@ public class PolarMenuView extends View {
 			float y = top + (i / cols) * (CARD_H + CARD_GAP_Y) - scroll;
 			if (!Ui.inside(mx, my, x, y, cw, CARD_H)) continue;
 			Module m = mods.get(i);
-			float gx = x + cw - 11.5f, gy = y + 10.4f;
-			if (Ui.inside(mx, my, gx - 12 - 6, gy - 6, 12, 12)) {
+			float gx = x + cw - 12, gy = y + 13;
+			if (Ui.inside(mx, my, gx - 14 - 6, gy - 6, 12, 12)) {
 				Polar.config().data().toggleFavorite(m.id());
 				showToast(Polar.config().data().isFavorite(m.id()) ? m.name() + " added to favorites" : m.name() + " removed from favorites");
 				return true;
@@ -1083,6 +1213,12 @@ public class PolarMenuView extends View {
 			closeModule();
 			return true;
 		}
+		if (key.is(KeyInput.Key.ESCAPE) && page == Page.MODS && !search.value().isEmpty()) {
+			search.setValue("");
+			search.setFocused(false);
+			scroll = scrollTarget = 0;
+			return true;
+		}
 		if (!typing && key.menuKey) {
 			onClose();
 			return true;
@@ -1092,7 +1228,19 @@ public class PolarMenuView extends View {
 
 	@Override
 	public boolean charTyped(char ch) {
-		if (search.charTyped(ch)) return true;
+		if (search.charTyped(ch)) {
+			scroll = scrollTarget = 0;
+			return true;
+		}
+		// on the Mods page, typing anywhere searches ("/" just focuses the box)
+		SettingsView typingIn = activeSettings();
+		if (page == Page.MODS && moduleSettings == null && !profileName.focused() && (typingIn == null || !typingIn.typing())
+			&& (ch == '/' || Character.isLetterOrDigit(ch))) {
+			search.setFocused(true);
+			if (ch != '/') search.charTyped(ch);
+			scroll = scrollTarget = 0;
+			return true;
+		}
 		if (profileName.charTyped(ch)) return true;
 		SettingsView v = activeSettings();
 		return v != null && v.charTyped(ch);

@@ -328,7 +328,10 @@ public final class McPlatform extends Platform {
 			case ENDER_PEARL: return Items.ENDER_PEARL;
 			case GOLDEN_APPLE: return Items.GOLDEN_APPLE;
 			case SHIELD:
-			case CHORUS_FRUIT: return null; // not in 1.8.9
+			case CHORUS_FRUIT:
+			case SPECTRAL_ARROW:
+			case TIPPED_ARROW:
+			case WIND_CHARGE: return null; // not in 1.8.9
 			default: return Items.ARROW;
 		}
 	}

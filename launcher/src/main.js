@@ -23,6 +23,14 @@ const { PolarService } = require('./core/polar');
 const { Profiles, COLORS: PROFILE_COLORS } = require('./core/profiles');
 const { request } = require('./core/http');
 
+/** Polar server routes the game may call through the launcher bridge. */
+const nowPlaying = require('./core/nowplaying').createNowPlaying();
+const GAME_API = [
+  ['GET', /^\/v1\/me$/], ['GET', /^\/v1\/me\/coins$/], ['PUT', /^\/v1\/me\/loadout$/], ['POST', /^\/v1\/cosmetics\/buy$/],
+  ['GET', /^\/v1\/friends$/], ['POST', /^\/v1\/friends\/(add|accept|remove|invite)$/],
+  ['GET', /^\/v1\/social\/[a-z]+$/], ['POST', /^\/v1\/social\/[a-z]+(\/[a-z]+)?$/],
+];
+
 const POLAR_CONFIG = require('../package.json').polar || {};
 /** GitHub repository the launcher updates itself from ("owner/name" in package.json > polar.updateRepo). */
 const UPDATE_REPO = POLAR_CONFIG.updateRepo || '';
@@ -79,6 +87,7 @@ let bridge = null;
 let run = null;
 
 function closeBridge() {
+  nowPlaying.stop();
   if (bridge) {
     bridge.close();
     bridge = null;
@@ -648,6 +657,13 @@ handle('game:launch', async (opts = {}) => {
         file: (rel) => polar.file(rel),
         lookup: (uuids) => polar.lookup(uuids),
         events: () => polar.drainGameEvents(),
+        nowPlaying: () => nowPlaying.current(),
+        // the game's own calls to the Polar server (coins, friends, wardrobe), limited to these routes
+        api: (method, apiPath, body) => {
+          const allowed = GAME_API.find(([m, re]) => m === method && re.test(apiPath));
+          if (!allowed) throw Object.assign(new Error('Not allowed'), { status: 403 });
+          return polar.api(method, apiPath, method === 'GET' ? undefined : body || {});
+        },
       },
     });
   }

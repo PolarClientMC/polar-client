@@ -403,7 +403,32 @@ public abstract class Platform {
 		return false;
 	}
 
-	/** Whether this version swaps the vanilla pause screen for Polar's. */
+	// ------------------------------------------------------------------ HUD data (versions without them return the "unknown" value)
+
+	/** A formatted text (chat component) as plain text, or null. */
+	public String plain(Object component) {
+		return null;
+	}
+
+	/** Block light (0-15) where the player stands, or -1 when unknown. Mobs spawn at 0. */
+	public int blockLight() {
+		return -1;
+	}
+
+	/** Milliseconds per tick of the singleplayer server, or -1 (not singleplayer, or unknown). */
+	public float localTickMillis() {
+		return -1;
+	}
+
+	/**
+	 * The Minecraft music track playing now, as its sound file path (e.g. "music/game/calm1"), or null when none is
+	 * playing or this version can't tell.
+	 */
+	public String musicTrack() {
+		return null;
+	}
+
+		/** Whether this version swaps the vanilla pause screen for Polar's. */
 	public boolean hasPolarPauseMenu() {
 		return false;
 	}

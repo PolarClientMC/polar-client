@@ -5,7 +5,14 @@ import dev.polarclient.modules.chat.ChatFilterModule;
 import dev.polarclient.modules.chat.ChatTimestampsModule;
 import dev.polarclient.modules.chat.CompactChatModule;
 import dev.polarclient.modules.chat.CopyChatModule;
+import dev.polarclient.modules.hud.ArrowCounterModule;
 import dev.polarclient.modules.hud.BossBarModule;
+import dev.polarclient.modules.hud.CoinsCounterModule;
+import dev.polarclient.modules.hud.FriendsOnlineModule;
+import dev.polarclient.modules.hud.LightLevelModule;
+import dev.polarclient.modules.hud.NowPlayingModule;
+import dev.polarclient.modules.hud.ServerTpsModule;
+import dev.polarclient.modules.hud.SessionOverviewModule;
 import dev.polarclient.modules.hud.ScoreboardModule;
 import dev.polarclient.modules.hud.TabListModule;
 import dev.polarclient.modules.inventory.InventorySearchModule;
@@ -167,6 +174,13 @@ public final class ModuleManager {
 		scoreboard = add(new ScoreboardModule());
 		bossBar = add(new BossBarModule());
 		tabList = add(new TabListModule());
+		add(new SessionOverviewModule());
+		add(new FriendsOnlineModule());
+		add(new CoinsCounterModule());
+		add(new ArrowCounterModule());
+		add(new LightLevelModule());
+		add(new ServerTpsModule());
+		add(new NowPlayingModule());
 		// visual
 		add(new SmoothCameraModule());
 		add(new EntityShadowsModule());

@@ -72,6 +72,11 @@ async function startBridge(handlers) {
           const { uuids } = JSON.parse((await readBody(req)) || '{}');
           return reply(200, { players: await handlers.polar.lookup(Array.isArray(uuids) ? uuids.slice(0, 200) : []) });
         }
+        if (req.method === 'GET' && url.pathname === '/polar/nowplaying' && handlers.polar.nowPlaying) return reply(200, handlers.polar.nowPlaying());
+        if (req.method === 'POST' && url.pathname === '/polar/api' && handlers.polar.api) {
+          const { method, path: apiPath, body } = JSON.parse((await readBody(req)) || '{}');
+          return reply(200, await handlers.polar.api(String(method || ''), String(apiPath || ''), body));
+        }
         if (req.method === 'GET' && url.pathname === '/polar/file') {
           const rel = String(url.searchParams.get('path') || '');
           const buf = await handlers.polar.file(rel);

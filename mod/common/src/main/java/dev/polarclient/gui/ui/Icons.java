@@ -66,6 +66,13 @@ public final class Icons {
 		MODULES.put("combo_counter", Icon.FIRE);
 		MODULES.put("item_counter", Icon.INVENTORY);
 		MODULES.put("session_time", Icon.HOURGLASS);
+		MODULES.put("session_overview", Icon.TIMER);
+		MODULES.put("friends_online", Icon.GROUPS);
+		MODULES.put("coins_counter", Icon.TOKEN);
+		MODULES.put("arrow_counter", Icon.TARGET);
+		MODULES.put("light_level", Icon.SUN);
+		MODULES.put("server_tps", Icon.SPEED);
+		MODULES.put("now_playing", Icon.VOLUME);
 		MODULES.put("memory", Icon.MEMORY);
 		MODULES.put("biome", Icon.FOREST);
 		MODULES.put("direction", Icon.NAVIGATION);

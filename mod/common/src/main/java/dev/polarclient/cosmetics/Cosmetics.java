@@ -343,6 +343,7 @@ public final class Cosmetics {
 				if (!e.isJsonObject()) continue;
 				JsonObject ev = e.getAsJsonObject();
 				String type = str(ev, "type");
+				dev.polarclient.social.PolarSocial.onEvent(ev);
 				String from = ev.has("from") && ev.get("from").isJsonObject() ? str(ev.getAsJsonObject("from"), "name") : "A friend";
 				if ("invite".equals(type)) {
 					inviteServer = str(ev, "server");

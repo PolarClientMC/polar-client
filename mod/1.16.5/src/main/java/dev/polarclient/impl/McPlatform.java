@@ -338,6 +338,9 @@ public final class McPlatform extends Platform {
 			case GOLDEN_APPLE: return Items.GOLDEN_APPLE;
 			case SHIELD: return Items.SHIELD;
 			case CHORUS_FRUIT: return Items.CHORUS_FRUIT;
+			case SPECTRAL_ARROW: return Items.SPECTRAL_ARROW;
+			case TIPPED_ARROW: return Items.TIPPED_ARROW;
+			case WIND_CHARGE: return Items.AIR;
 			default: return Items.ARROW;
 		}
 	}
@@ -932,5 +935,53 @@ public final class McPlatform extends Platform {
 	@Override
 	public boolean controlDown() {
 		return InputConstants.isKeyDown(mc().getWindow().getWindow(), 341) || InputConstants.isKeyDown(mc().getWindow().getWindow(), 345) || InputConstants.isKeyDown(mc().getWindow().getWindow(), 343) || InputConstants.isKeyDown(mc().getWindow().getWindow(), 347);
+	}
+
+	// ------------------------------------------------------------------ HUD data
+
+	@Override
+	public String plain(Object component) {
+		return component instanceof net.minecraft.network.chat.Component ? ((net.minecraft.network.chat.Component) component).getString() : null;
+	}
+
+	@Override
+	public int blockLight() {
+		if (mc().level == null || player() == null) return -1;
+		return mc().level.getBrightness(net.minecraft.world.level.LightLayer.BLOCK, player().blockPosition());
+	}
+
+	/** The music manager keeps the playing track in its only SoundInstance field: found by type, so names don't matter. */
+	private static java.lang.reflect.Field musicField;
+	private static boolean musicFieldSearched;
+
+	@Override
+	public String musicTrack() {
+		try {
+			Object mm = mc().getMusicManager();
+			if (!musicFieldSearched) {
+				musicFieldSearched = true;
+				for (java.lang.reflect.Field f : mm.getClass().getDeclaredFields()) {
+					if (net.minecraft.client.resources.sounds.SoundInstance.class.isAssignableFrom(f.getType())) {
+						f.setAccessible(true);
+						musicField = f;
+						break;
+					}
+				}
+			}
+			if (musicField == null) return null;
+			Object v = musicField.get(mm);
+			if (!(v instanceof net.minecraft.client.resources.sounds.SoundInstance)) return null;
+			net.minecraft.client.resources.sounds.SoundInstance si = (net.minecraft.client.resources.sounds.SoundInstance) v;
+			if (!mc().getSoundManager().isActive(si)) return null;
+			// Sound's own text is "Sound[namespace:music/game/calm1]"
+			String s = String.valueOf(si.getSound());
+			int i = s.indexOf("music");
+			if (i < 0) return null;
+			int e = i;
+			while (e < s.length() && s.charAt(e) != ']' && s.charAt(e) != ',' && !Character.isWhitespace(s.charAt(e))) e++;
+			return s.substring(i, e);
+		} catch (Throwable t) {
+			return null;
+		}
 	}
 }

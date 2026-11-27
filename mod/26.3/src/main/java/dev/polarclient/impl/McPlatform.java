@@ -1014,8 +1014,29 @@ public final class McPlatform extends Platform {
 		if (player() == null || mc().gameMode == null) return false;
 		net.minecraft.world.inventory.AbstractContainerMenu m = player().containerMenu;
 		if (m == null || slot < 0 || slot >= m.slots.size()) return false;
-		mc().gameMode.handleInventoryMouseClick(m.containerId, slot, button, net.minecraft.world.inventory.ContainerInput.PICKUP, player());
-		return true;
+		// the click call's arguments changed in 26.x, so it is matched by its parameter types
+		try {
+			for (java.lang.reflect.Method mt : mc().gameMode.getClass().getMethods()) {
+				if (!mt.getName().equals("handleInventoryMouseClick")) continue;
+				Class<?>[] types = mt.getParameterTypes();
+				Object[] args = new Object[types.length];
+				int[] ints = {m.containerId, slot, button};
+				int n = 0;
+				boolean ok = true;
+				for (int i = 0; i < types.length; i++) {
+					if (types[i] == int.class && n < ints.length) args[i] = ints[n++];
+					else if (types[i] == net.minecraft.world.inventory.ContainerInput.class) args[i] = net.minecraft.world.inventory.ContainerInput.PICKUP;
+					else if (types[i].isInstance(player())) args[i] = player();
+					else ok = false;
+				}
+				if (!ok || n < 2) continue;
+				mt.invoke(mc().gameMode, args);
+				return true;
+			}
+		} catch (ReflectiveOperationException e) {
+			dev.polarclient.Log.error("Couldn't click a slot", e);
+		}
+		return false;
 	}
 
 	@Override

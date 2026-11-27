@@ -107,14 +107,17 @@ public final class BoxSorter {
 				target = null;
 				return;
 			}
+			if (!p.clickSlot(live.get(i) == null || want != null ? j : i, 0)) {
+				// this version can't click for us: stop rather than try again forever
+				target = null;
+				return;
+			}
+			// the first click is done: finish the move
 			if (live.get(i) == null) {
-				p.clickSlot(j, 0);
 				p.clickSlot(i, 0);
 			} else if (want == null) {
-				p.clickSlot(i, 0);
 				p.clickSlot(j, 0);
 			} else {
-				p.clickSlot(j, 0);
 				p.clickSlot(i, 0);
 				p.clickSlot(j, 0);
 			}

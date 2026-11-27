@@ -540,3 +540,78 @@ test('servers can ask whether a player is in game with Polar on their server, an
   const r = await ask({ uuid: ALICE.id });
   assert.deepEqual(Object.keys(r.data), ['playing'], 'only yes or no');
 });
+
+test('social: status, messages, profiles and parties', async () => {
+  const mojang = fakeMojang();
+  const { hub, call, ctx } = setup();
+  const alice = await signIn(call, mojang, ALICE);
+  const bob = await signIn(call, mojang, BOB);
+  const A = dash(ALICE.id), B = dash(BOB.id);
+  await call('POST', '/v1/friends/add', { token: alice, body: { name: 'Bob_2' } });
+  await call('POST', '/v1/friends/accept', { token: bob, body: { uuid: A } });
+  await goOnline(hub, alice);
+  await goOnline(hub, bob);
+  const bobSocket = ctx.sockets.find((s) => s.tags.includes(`u:${B}`));
+  const aliceSocket = ctx.sockets.find((s) => s.tags.includes(`u:${A}`));
+  hub.webSocketMessage(aliceSocket, JSON.stringify({ type: 'where', state: 'server', server: 'play.example.net' }));
+
+  // status: invisible shows as offline, busy holds invites
+  assert.equal((await call('POST', '/v1/social/status', { token: alice, body: { status: 'nope' } })).status, 400);
+  await call('POST', '/v1/social/status', { token: alice, body: { status: 'invisible' } });
+  let r = await call('GET', '/v1/friends', { token: bob });
+  assert.equal(r.data.friends[0].online, false);
+  assert.equal(r.data.friends[0].where, null, 'invisible hides where you are');
+  await call('POST', '/v1/social/status', { token: bob, body: { status: 'busy' } });
+  await call('POST', '/v1/social/status', { token: alice, body: { status: 'online' } });
+  assert.equal((await call('POST', '/v1/friends/invite', { token: alice, body: { uuid: B } })).status, 409, 'busy holds invites');
+  r = await call('GET', '/v1/friends', { token: alice });
+  assert.equal(r.data.friends[0].status, 'busy');
+
+  // messages: friends only, relayed live, unread until the thread is read
+  r = await call('POST', '/v1/social/dm', { token: alice, body: { uuid: B, text: '  hi§c there  ' } });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.message.text, 'hi c there', 'formatting codes and extra spaces go');
+  const live = JSON.parse(bobSocket.sent.at(-1));
+  assert.equal(live.type, 'dm');
+  assert.equal(live.from.name, 'Alice');
+  assert.equal((await call('POST', '/v1/social/dm', { token: alice, body: { uuid: B, text: '   ' } })).status, 400);
+  assert.equal((await call('POST', '/v1/social/dm', { token: alice, body: { uuid: dash('99990000999900009999000099990000'), text: 'x' } })).status, 404);
+  r = await call('GET', '/v1/social/inbox', { token: bob });
+  assert.deepEqual(r.data.unread.map((u) => [u.name, u.count]), [['Alice', 1]]);
+  assert.equal((await call('GET', '/v1/friends', { token: bob })).data.friends[0].unread, 1);
+  r = await call('POST', '/v1/social/thread', { token: bob, body: { uuid: A } });
+  assert.deepEqual(r.data.messages.map((m) => [m.from, m.text]), [[A, 'hi c there']]);
+  assert.equal((await call('GET', '/v1/social/inbox', { token: bob })).data.unread.length, 0, 'read now');
+
+  // profiles: by name, where only for friends
+  r = await call('POST', '/v1/social/profile', { token: bob, body: { name: 'alice' } });
+  assert.equal(r.data.polar, true);
+  assert.equal(r.data.name, 'Alice');
+  assert.deepEqual(r.data.where, { state: 'server', server: 'play.example.net' });
+  assert.equal((await call('POST', '/v1/social/profile', { token: bob, body: { name: 'Nobody' } })).data.polar, false);
+
+  // parties: invite (makes the party), join, warp, chat, leave
+  r = await call('POST', '/v1/social/party/invite', { token: alice, body: { uuid: B } });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const partyId = r.data.party.id;
+  assert.equal(r.data.party.members.length, 1);
+  assert.deepEqual(r.data.party.pending.map((m) => m.name), ['Bob_2']);
+  const inv = JSON.parse(bobSocket.sent.at(-1));
+  assert.equal(inv.event, 'invite');
+  r = await call('GET', '/v1/social/party', { token: bob });
+  assert.equal(r.data.invites[0].from.name, 'Alice');
+  assert.equal((await call('POST', '/v1/social/party/join', { token: bob, body: { party: 'nope' } })).status, 404);
+  r = await call('POST', '/v1/social/party/join', { token: bob, body: { party: partyId } });
+  assert.deepEqual(r.data.party.members.map((m) => [m.name, m.leader]), [['Alice', true], ['Bob_2', false]]);
+  assert.equal((await call('POST', '/v1/social/party/warp', { token: bob, body: {} })).status, 403, 'only the leader brings the party');
+  r = await call('POST', '/v1/social/party/warp', { token: alice, body: {} });
+  assert.deepEqual(r.data, { sent: true, server: 'play.example.net' });
+  assert.deepEqual(JSON.parse(bobSocket.sent.at(-1)).server, 'play.example.net');
+  await call('POST', '/v1/social/party/chat', { token: bob, body: { text: 'gg' } });
+  assert.equal(JSON.parse(aliceSocket.sent.at(-1)).text, 'gg');
+  // the leader leaves: a party of one is no party
+  r = await call('POST', '/v1/social/party/leave', { token: alice });
+  assert.equal(r.data.party, null);
+  assert.equal((await call('GET', '/v1/social/party', { token: bob })).data.party, null);
+  assert.equal((await call('GET', '/v1/social/nothing', { token: bob })).status, 404);
+});

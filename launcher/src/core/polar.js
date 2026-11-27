@@ -253,12 +253,13 @@ class PolarService {
       if (msg && msg.type === 'coins') {
         const ev = { type: 'coins', coins: Number(msg.coins) || 0 };
         this.gameEvents.push(ev); // the game shows the balance too
-        if (this.gameEvents.length > 20) this.gameEvents.shift();
+        if (this.gameEvents.length > 40) this.gameEvents.shift();
         return this.onEvent(ev);
       }
-      if (!msg || (msg.type !== 'invite' && msg.type !== 'friends')) return;
+      // what the game shows too: invites, friend requests, direct messages and party news
+      if (!msg || !['invite', 'friends', 'dm', 'party'].includes(msg.type)) return;
       this.gameEvents.push(msg);
-      if (this.gameEvents.length > 20) this.gameEvents.shift();
+      if (this.gameEvents.length > 40) this.gameEvents.shift();
       this.onEvent(msg);
     };
     ws.onclose = (e) => {

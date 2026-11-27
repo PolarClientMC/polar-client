@@ -353,7 +353,10 @@ public final class Cosmetics {
 					say("§b" + from + "§r invited you to §e" + inviteServer + "§r." + (key == null ? " Join it from the Polar launcher." : " Press §a" + key + "§r to join."));
 				} else if ("friends".equals(type)) {
 					String ev2 = str(ev, "event");
-					if ("request".equals(ev2)) say("§b" + from + "§r wants to be your friend. Accept it in the Polar launcher (Friends).");
+					if ("request".equals(ev2)) {
+						String fk = Platform.get().polarKeyName(PolarKey.FRIENDS);
+						say("§b" + from + "§r wants to be your friend." + (fk == null ? " Accept it in the Polar launcher (Friends)." : " Press §a" + fk + "§r to accept."));
+					}
 					else if ("accepted".equals(ev2)) say("§b" + from + "§r accepted your friend request.");
 				}
 			}

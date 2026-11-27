@@ -48,7 +48,20 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS cosmetic_config (item TEXT PRIMARY KEY, price INTEGER NOT NULL DEFAULT 0, code_only INTEGER NOT NULL DEFAULT 0)`,
   // code-only profile tags shown next to the player name (icons, granted by admins)
   `CREATE TABLE IF NOT EXISTS player_tags (uuid TEXT NOT NULL, tag TEXT NOT NULL, created INTEGER NOT NULL, PRIMARY KEY (uuid, tag))`,
+  // social: the status you show friends, direct messages (relayed, kept a while for friends who were offline) and parties
+  'CREATE TABLE IF NOT EXISTS social_status (uuid TEXT PRIMARY KEY, status TEXT NOT NULL)',
+  `CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT NOT NULL, recipient TEXT NOT NULL,
+     text TEXT NOT NULL, created INTEGER NOT NULL, seen INTEGER NOT NULL DEFAULT 0)`,
+  'CREATE INDEX IF NOT EXISTS messages_pair ON messages (recipient, sender, id)',
+  'CREATE TABLE IF NOT EXISTS parties (id TEXT PRIMARY KEY, leader TEXT NOT NULL, created INTEGER NOT NULL)',
+  'CREATE TABLE IF NOT EXISTS party_members (party TEXT NOT NULL, uuid TEXT PRIMARY KEY, joined INTEGER NOT NULL)',
+  'CREATE TABLE IF NOT EXISTS party_invites (party TEXT NOT NULL, uuid TEXT NOT NULL, created INTEGER NOT NULL, PRIMARY KEY (party, uuid))',
 ];
+const STATUSES = new Set(['online', 'busy', 'away', 'invisible']);
+const MAX_DM = 256;
+const KEEP_DMS = 200; // per pair of friends
+const PARTY_MAX = 8;
+const PARTY_INVITE_TTL = 10 * 60 * 1000;
 
 const SEEDED_COIN_USERS = ['sharky124321345', 'CraftyCanyon'];
 const COINS_PER_HOUR = 10;
@@ -167,6 +180,7 @@ export class Hub {
     if (p === '/v1/friends/accept' && m === 'POST') return json(this.acceptFriend(me, await body(request)));
     if (p === '/v1/friends/remove' && m === 'POST') return json(this.removeFriend(me, await body(request)));
     if (p === '/v1/friends/invite' && m === 'POST') return json(this.invite(me, await body(request)));
+    if (p.startsWith('/v1/social/')) return json(await this.social(me, p.slice('/v1/social/'.length), m, request));
     throw new HttpError(404, 'Not found');
   }
 
@@ -615,8 +629,11 @@ export class Hub {
     const out = { friends: [], incoming: [], outgoing: [] };
     for (const r of rows) {
       if (r.state === 'friends') {
-        const online = this.online(r.uuid);
-        out.friends.push({ uuid: r.uuid, name: r.name, online, where: online ? this.where(r.uuid) : null, lastSeen: r.lastSeen, ...offlineFlag(r.uuid) });
+        const status = this.status(r.uuid);
+        const online = this.online(r.uuid) && status !== 'invisible';
+        const unread = Object.values(this.sql.exec('SELECT COUNT(*) FROM messages WHERE recipient = ? AND sender = ? AND seen = 0', me.uuid, r.uuid).toArray()[0])[0];
+        out.friends.push({ uuid: r.uuid, name: r.name, online, status: online ? status : 'offline', where: online ? this.where(r.uuid) : null,
+          lastSeen: r.lastSeen, unread, ...offlineFlag(r.uuid) });
       } else {
         (r.state === 'in' ? out.incoming : out.outgoing).push({ uuid: r.uuid, name: r.name, ...offlineFlag(r.uuid) });
       }
@@ -686,11 +703,245 @@ export class Hub {
     this.limit(`i:${me.uuid}`, 20);
     const other = dashed(b.uuid);
     if (!other || this.state(me.uuid, other) !== 'friends') throw new HttpError(404, 'You can only invite friends.');
-    if (!this.online(other)) throw new HttpError(409, "They're not on Polar right now.");
+    if (!this.online(other) || this.status(other) === 'invisible') throw new HttpError(409, "They're not on Polar right now.");
+    if (this.status(other) === 'busy') throw new HttpError(409, "They're busy right now, so invites are held. Try a message.");
     const server = String(b.server || (this.where(me.uuid) || {}).server || '').slice(0, 100);
     if (!server) throw new HttpError(400, "Join a server first, then invite your friend to it.");
     this.tell(other, { type: 'invite', from: { uuid: me.uuid, name: me.name }, server });
     return { sent: true, server };
+  }
+
+  // ------------------------------------------------------------------ social: status, messages, parties, profiles
+
+  /** The status a player shows friends: online, busy (invites held), away or invisible (shown as offline). */
+  status(uuid) {
+    const r = this.sql.exec('SELECT status FROM social_status WHERE uuid = ?', uuid).toArray()[0];
+    return r ? r.status : 'online';
+  }
+
+  friendsOf(uuid) {
+    return this.sql.exec("SELECT other FROM friends WHERE uuid = ? AND state = 'friends'", uuid).toArray().map((r) => r.other);
+  }
+
+  async social(me, path, method, request) {
+    const b = method === 'POST' ? await body(request) : {};
+    if (path === 'party' && method === 'GET') return this.partyOf(me.uuid);
+    if (path === 'inbox' && method === 'GET') return this.inbox(me);
+    if (method !== 'POST') throw new HttpError(404, 'Not found');
+    switch (path) {
+      case 'status': return this.setStatus(me, b);
+      case 'dm': return this.sendDm(me, b);
+      case 'thread': return this.thread(me, b);
+      case 'profile': return this.socialProfile(me, b);
+      case 'party/invite': return this.partyInvite(me, b);
+      case 'party/join': return this.partyJoin(me, b);
+      case 'party/decline': return this.partyDecline(me, b);
+      case 'party/leave': return this.partyLeave(me);
+      case 'party/kick': return this.partyKick(me, b);
+      case 'party/warp': return this.partyWarp(me, b);
+      case 'party/chat': return this.partyChat(me, b);
+      default: throw new HttpError(404, 'Not found');
+    }
+  }
+
+  setStatus(me, b) {
+    const status = String(b.status || '');
+    if (!STATUSES.has(status)) throw new HttpError(400, 'Pick online, busy, away or invisible.');
+    this.sql.exec('INSERT INTO social_status (uuid, status) VALUES (?, ?) ON CONFLICT (uuid) DO UPDATE SET status = excluded.status', me.uuid, status);
+    for (const f of this.friendsOf(me.uuid)) this.tell(f, { type: 'friends', event: 'status', from: { uuid: me.uuid, name: me.name } });
+    return { status };
+  }
+
+  cleanText(t, max) {
+    return String(t || '').replace(/[\u0000-\u001f\u007f§]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+  }
+
+  sendDm(me, b) {
+    this.limit(`dm:${me.uuid}`, 30);
+    const other = dashed(b.uuid);
+    if (!other || this.state(me.uuid, other) !== 'friends') throw new HttpError(404, 'You can only message friends.');
+    const text = this.cleanText(b.text, MAX_DM);
+    if (!text) throw new HttpError(400, 'Type a message.');
+    const now = Date.now();
+    this.sql.exec('INSERT INTO messages (sender, recipient, text, created) VALUES (?, ?, ?, ?)', me.uuid, other, text, now);
+    const id = Object.values(this.sql.exec('SELECT last_insert_rowid()').toArray()[0])[0];
+    // keep the last KEEP_DMS of each pair
+    this.sql.exec(`DELETE FROM messages WHERE ((sender = ? AND recipient = ?) OR (sender = ? AND recipient = ?)) AND id <= (
+      SELECT id FROM messages WHERE (sender = ? AND recipient = ?) OR (sender = ? AND recipient = ?) ORDER BY id DESC LIMIT 1 OFFSET ?)`,
+    me.uuid, other, other, me.uuid, me.uuid, other, other, me.uuid, KEEP_DMS);
+    const msg = { id, from: me.uuid, text, at: now };
+    this.tell(other, { type: 'dm', from: { uuid: me.uuid, name: me.name }, id, text, at: now });
+    return { message: msg };
+  }
+
+  thread(me, b) {
+    const other = dashed(b.uuid);
+    if (!other || this.state(me.uuid, other) !== 'friends') throw new HttpError(404, 'You can only message friends.');
+    const rows = this.sql.exec(`SELECT id, sender, text, created FROM messages WHERE (sender = ? AND recipient = ?) OR (sender = ? AND recipient = ?)
+      ORDER BY id DESC LIMIT 60`, me.uuid, other, other, me.uuid).toArray().reverse();
+    this.sql.exec('UPDATE messages SET seen = 1 WHERE recipient = ? AND sender = ? AND seen = 0', me.uuid, other);
+    return { messages: rows.map((r) => ({ id: r.id, from: r.sender, text: r.text, at: r.created })) };
+  }
+
+  inbox(me) {
+    const rows = this.sql.exec(`SELECT m.sender AS uuid, p.name AS name, COUNT(*) AS n, MAX(m.created) AS at FROM messages m
+      JOIN players p ON p.uuid = m.sender WHERE m.recipient = ? AND m.seen = 0 GROUP BY m.sender`, me.uuid).toArray();
+    return { unread: rows.map((r) => ({ uuid: r.uuid, name: r.name, count: r.n, at: r.at })) };
+  }
+
+  /** What a profile card shows: never where someone is unless you're friends, and nothing for invisible players. */
+  socialProfile(me, b) {
+    let uuid = dashed(b.uuid);
+    if (!uuid && NAME.test(String(b.name || ''))) {
+      const r = this.sql.exec('SELECT uuid FROM players WHERE name = ? COLLATE NOCASE AND first_seen > 0 ORDER BY last_seen DESC LIMIT 1', String(b.name)).toArray()[0];
+      uuid = r ? r.uuid : null;
+    }
+    const pl = uuid ? this.player(uuid) : null;
+    if (!pl || !pl.first_seen || pl.banned) return { polar: false };
+    const friend = this.state(me.uuid, uuid);
+    const status = this.status(uuid);
+    const online = this.online(uuid) && status !== 'invisible';
+    const lo = this.loadout(uuid);
+    const wearing = Object.values(lo.slots || {}).map((s) => (s && ITEMS.get(s.id) ? ITEMS.get(s.id).name : null)).filter(Boolean);
+    const tags = this.tagDefs(this.tags(uuid));
+    return {
+      polar: true, uuid, name: pl.name, since: pl.first_seen, friend: friend || null,
+      online, status: online ? status : 'offline', where: friend === 'friends' && online ? this.where(uuid) : null,
+      wearing, loadout: lo, tags, activeTag: lo.activeTag || '', me: uuid === me.uuid, ...offlineFlag(uuid),
+    };
+  }
+
+  partyRow(uuid) {
+    return this.sql.exec('SELECT party FROM party_members WHERE uuid = ?', uuid).toArray()[0] || null;
+  }
+
+  partyOf(uuid) {
+    const now = Date.now();
+    this.sql.exec('DELETE FROM party_invites WHERE created < ?', now - PARTY_INVITE_TTL);
+    const invites = this.sql.exec(`SELECT i.party AS party, p.leader AS leader, pl.name AS name FROM party_invites i
+      JOIN parties p ON p.id = i.party JOIN players pl ON pl.uuid = p.leader WHERE i.uuid = ?`, uuid).toArray()
+      .map((r) => ({ party: r.party, from: { uuid: r.leader, name: r.name } }));
+    const row = this.partyRow(uuid);
+    if (!row) return { party: null, invites };
+    const party = this.sql.exec('SELECT id, leader FROM parties WHERE id = ?', row.party).toArray()[0];
+    if (!party) return { party: null, invites };
+    const members = this.sql.exec(`SELECT m.uuid AS uuid, p.name AS name FROM party_members m JOIN players p ON p.uuid = m.uuid
+      WHERE m.party = ? ORDER BY m.joined`, party.id).toArray().map((r) => {
+      const online = this.online(r.uuid);
+      return { uuid: r.uuid, name: r.name, online, leader: r.uuid === party.leader, where: online ? this.where(r.uuid) : null };
+    });
+    const pending = this.sql.exec('SELECT i.uuid AS uuid, p.name AS name FROM party_invites i JOIN players p ON p.uuid = i.uuid WHERE i.party = ?', party.id)
+      .toArray().map((r) => ({ uuid: r.uuid, name: r.name }));
+    return { party: { id: party.id, leader: party.leader, members, pending, max: PARTY_MAX }, invites };
+  }
+
+  partyMembers(id) {
+    return this.sql.exec('SELECT uuid FROM party_members WHERE party = ?', id).toArray().map((r) => r.uuid);
+  }
+
+  partyChanged(id, extra = {}) {
+    for (const u of this.partyMembers(id)) this.tell(u, { type: 'party', event: 'update', ...extra });
+  }
+
+  partyInvite(me, b) {
+    this.limit(`pi:${me.uuid}`, 20);
+    const other = dashed(b.uuid);
+    if (!other || this.state(me.uuid, other) !== 'friends') throw new HttpError(404, 'You can only invite friends to your party.');
+    if (this.partyRow(other)) {
+      const theirs = this.partyRow(other).party, mine = this.partyRow(me.uuid);
+      if (mine && mine.party === theirs) throw new HttpError(409, "They're already in your party.");
+    }
+    const now = Date.now();
+    let row = this.partyRow(me.uuid);
+    if (!row) {
+      const id = randomHex(8);
+      this.sql.exec('INSERT INTO parties (id, leader, created) VALUES (?, ?, ?)', id, me.uuid, now);
+      this.sql.exec('INSERT INTO party_members (party, uuid, joined) VALUES (?, ?, ?)', id, me.uuid, now);
+      row = { party: id };
+    }
+    const party = this.sql.exec('SELECT id, leader FROM parties WHERE id = ?', row.party).toArray()[0];
+    if (party.leader !== me.uuid) throw new HttpError(403, 'Only the party leader can invite.');
+    if (this.partyMembers(party.id).length >= PARTY_MAX) throw new HttpError(409, `A party has room for ${PARTY_MAX}.`);
+    this.sql.exec('INSERT INTO party_invites (party, uuid, created) VALUES (?, ?, ?) ON CONFLICT (party, uuid) DO UPDATE SET created = excluded.created', party.id, other, now);
+    this.tell(other, { type: 'party', event: 'invite', party: party.id, from: { uuid: me.uuid, name: me.name } });
+    this.partyChanged(party.id);
+    return this.partyOf(me.uuid);
+  }
+
+  partyJoin(me, b) {
+    const id = String(b.party || '');
+    const inv = this.sql.exec('SELECT created FROM party_invites WHERE party = ? AND uuid = ?', id, me.uuid).toArray()[0];
+    if (!inv || inv.created < Date.now() - PARTY_INVITE_TTL) throw new HttpError(404, 'That party invite has run out.');
+    if (this.partyMembers(id).length >= PARTY_MAX) throw new HttpError(409, 'That party is full.');
+    if (this.partyRow(me.uuid)) this.partyLeave(me);
+    this.sql.exec('DELETE FROM party_invites WHERE uuid = ? AND party = ?', me.uuid, id);
+    this.sql.exec('INSERT INTO party_members (party, uuid, joined) VALUES (?, ?, ?)', id, me.uuid, Date.now());
+    this.partyChanged(id, { joined: { uuid: me.uuid, name: me.name } });
+    return this.partyOf(me.uuid);
+  }
+
+  partyDecline(me, b) {
+    this.sql.exec('DELETE FROM party_invites WHERE uuid = ? AND party = ?', me.uuid, String(b.party || ''));
+    return this.partyOf(me.uuid);
+  }
+
+  partyLeave(me) {
+    const row = this.partyRow(me.uuid);
+    if (!row) return this.partyOf(me.uuid);
+    this.sql.exec('DELETE FROM party_members WHERE uuid = ?', me.uuid);
+    const left = this.sql.exec('SELECT uuid FROM party_members WHERE party = ? ORDER BY joined', row.party).toArray();
+    if (left.length < 2) {
+      // a party of one is no party
+      for (const r of left) this.tell(r.uuid, { type: 'party', event: 'update', disbanded: true });
+      this.sql.exec('DELETE FROM party_members WHERE party = ?', row.party);
+      this.sql.exec('DELETE FROM party_invites WHERE party = ?', row.party);
+      this.sql.exec('DELETE FROM parties WHERE id = ?', row.party);
+    } else {
+      const party = this.sql.exec('SELECT leader FROM parties WHERE id = ?', row.party).toArray()[0];
+      if (party && party.leader === me.uuid) this.sql.exec('UPDATE parties SET leader = ? WHERE id = ?', left[0].uuid, row.party);
+      this.partyChanged(row.party, { left: { uuid: me.uuid, name: me.name } });
+    }
+    return this.partyOf(me.uuid);
+  }
+
+  leaderParty(me) {
+    const row = this.partyRow(me.uuid);
+    const party = row && this.sql.exec('SELECT id, leader FROM parties WHERE id = ?', row.party).toArray()[0];
+    if (!party) throw new HttpError(404, "You're not in a party.");
+    if (party.leader !== me.uuid) throw new HttpError(403, 'Only the party leader can do that.');
+    return party;
+  }
+
+  partyKick(me, b) {
+    const party = this.leaderParty(me);
+    const other = dashed(b.uuid);
+    if (!other || other === me.uuid) throw new HttpError(400, 'Pick a member.');
+    const was = this.sql.exec('DELETE FROM party_members WHERE uuid = ? AND party = ?', other, party.id).rowsWritten;
+    this.sql.exec('DELETE FROM party_invites WHERE uuid = ? AND party = ?', other, party.id);
+    if (was) this.tell(other, { type: 'party', event: 'update', kicked: true });
+    if (this.partyMembers(party.id).length < 2) return this.partyLeave(me);
+    this.partyChanged(party.id);
+    return this.partyOf(me.uuid);
+  }
+
+  /** "Bring the party": members get a few seconds' prompt with Stay here, so nobody is pulled out of a match. */
+  partyWarp(me, b) {
+    this.limit(`pw:${me.uuid}`, 6);
+    const party = this.leaderParty(me);
+    const server = String(b.server || (this.where(me.uuid) || {}).server || '').slice(0, 100);
+    if (!server) throw new HttpError(400, 'Join a server first.');
+    for (const u of this.partyMembers(party.id)) if (u !== me.uuid) this.tell(u, { type: 'party', event: 'warp', server, from: { uuid: me.uuid, name: me.name } });
+    return { sent: true, server };
+  }
+
+  partyChat(me, b) {
+    this.limit(`pc:${me.uuid}`, 30);
+    const row = this.partyRow(me.uuid);
+    if (!row) throw new HttpError(404, "You're not in a party.");
+    const text = this.cleanText(b.text, MAX_DM);
+    if (!text) throw new HttpError(400, 'Type a message.');
+    for (const u of this.partyMembers(row.party)) this.tell(u, { type: 'party', event: 'chat', from: { uuid: me.uuid, name: me.name }, text, at: Date.now() });
+    return { sent: true };
   }
 
   // ------------------------------------------------------------------ settings sync

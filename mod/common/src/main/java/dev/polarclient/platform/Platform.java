@@ -438,6 +438,11 @@ public abstract class Platform {
 		return null;
 	}
 
+	/** The other player under the crosshair: {uuid, name}, or null. */
+	public String[] crosshairPlayer() {
+		return null;
+	}
+
 	/** A vanilla screen's title as plain text, or null. */
 	public String screenTitle(Object screen) {
 		return null;

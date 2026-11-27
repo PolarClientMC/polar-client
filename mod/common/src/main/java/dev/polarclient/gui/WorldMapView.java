@@ -305,7 +305,7 @@ public class WorldMapView extends View {
 		by += 10;
 		boolean hasSel = selected != null || deathSelected;
 		float listBottom = y + h - (hasSel ? 92 : 6);
-		g.scissor(Math.round(x), Math.round(by), Math.round(w), Math.round(listBottom - by));
+		g.scissor(Math.round(x), Math.round(by), Math.round(x + w), Math.round(listBottom));
 		float ry = by - listScroll;
 		final double px = p().playerX(), pz = p().playerZ();
 		double[] d = deathHere();

@@ -995,6 +995,13 @@ public final class McPlatform extends Platform {
 	}
 
 	@Override
+	public String[] crosshairPlayer() {
+		net.minecraft.world.entity.Entity e = mc().crosshairPickEntity;
+		if (!(e instanceof net.minecraft.world.entity.player.Player) || e == player()) return null;
+		return new String[] {e.getUUID().toString(), e.getName().getString()};
+	}
+
+	@Override
 	public String skinKind(Object s) {
 		if (s instanceof net.minecraft.client.gui.screens.DeathScreen) return "death";
 		if (s instanceof net.minecraft.client.gui.screens.ConnectScreen) return "connect";

@@ -1,5 +1,7 @@
 package dev.polarclient.module;
 
+import dev.polarclient.gui.ui.Ui;
+
 import dev.polarclient.Polar;
 import dev.polarclient.gfx.Gfx;
 import dev.polarclient.gfx.UiFont;
@@ -21,6 +23,10 @@ public abstract class TextHudModule extends HudModule {
 	protected final BooleanSetting background;
 	protected final ColorSetting backgroundColor;
 	protected final ModeSetting brackets;
+	protected final ModeSetting border;
+
+	/** Border colours, in the order of the Border setting's choices (after None). */
+	public static final int[] BORDER_COLORS = {0xFF5AD8FF, 0xFFFFFFFF, 0xFFFFD36B, 0xFFFF7AC6};
 
 	protected TextHudModule(String id, String name, String description, boolean enabledByDefault, double refX, double refY) {
 		this(id, name, description, Category.HUD, enabledByDefault, refX, refY);
@@ -34,6 +40,8 @@ public abstract class TextHudModule extends HudModule {
 		backgroundColor = add(new ColorSetting("background_color", "Background color", 0x880B1426, true));
 		backgroundColor.visibleWhen(() -> background.on());
 		brackets = add(new ModeSetting("brackets", "Brackets", "None", "None", "[ ]", "( )"));
+		border = add(new ModeSetting("border", "Border", "None", "None", "Ice", "White", "Gold", "Pink"));
+		border.visibleWhen(() -> background.on());
 	}
 
 	/** Lines to show. {@code preview} = sample values for the HUD editor when there's no live data. */
@@ -103,12 +111,16 @@ public abstract class TextHudModule extends HudModule {
 	protected void draw(Gfx g, boolean preview) {
 		List<String> ls = current(preview);
 		int w = width(preview), h = height(preview);
-		if (background.on()) Draw.round(g, 0, 0, w, h, 3, backgroundColor.argb());
+		if (background.on()) {
+			Draw.round(g, 0, 0, w, h, 3, fade(backgroundColor.argb()));
+			int bi = border.modes().indexOf(border.get()) - 1;
+			if (bi >= 0 && bi < BORDER_COLORS.length) Ui.ring(g, 0, 0, w, h, 3, fade(BORDER_COLORS[bi]), 1f);
+		}
 		int y = background.on() ? PAD_Y : 0;
 		for (int i = 0; i < ls.size(); i++) {
 			String l = ls.get(i);
 			int x = background.on() ? (ls.size() == 1 ? (w - textWidth(l)) / 2 : PAD_X) : 0;
-			drawText(g, l, x, y, textColor.argb(i * 0.08f), shadow.on());
+			drawText(g, l, x, y, fade(textColor.argb(i * 0.08f)), shadow.on());
 			y += Draw.lineHeight() + LINE_GAP;
 		}
 	}

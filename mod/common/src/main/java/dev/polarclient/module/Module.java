@@ -15,6 +15,7 @@ public abstract class Module {
 	private final String description;
 	private final Category category;
 	private boolean enabled;
+	private final boolean enabledByDefault;
 	private final List<Setting<?>> settings = new ArrayList<Setting<?>>();
 
 	protected Module(String id, String name, String description, Category category, boolean enabledByDefault) {
@@ -23,6 +24,7 @@ public abstract class Module {
 		this.description = description;
 		this.category = category;
 		this.enabled = enabledByDefault;
+		this.enabledByDefault = enabledByDefault;
 	}
 
 	protected static Platform p() {
@@ -132,6 +134,11 @@ public abstract class Module {
 	/** Null when the module works on this Minecraft version, otherwise a short reason it doesn't. */
 	public String unavailableReason() {
 		return null;
+	}
+
+	/** Whether the module starts switched on in a fresh install. */
+	public boolean enabledByDefault() {
+		return enabledByDefault;
 	}
 
 	public void resetSettings() {

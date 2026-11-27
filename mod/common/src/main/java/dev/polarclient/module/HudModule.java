@@ -6,23 +6,35 @@ import dev.polarclient.setting.NumberSetting;
 
 /**
  * A module drawn on the HUD that can be dragged and scaled in the HUD editor.
- * Positions are stored relative to the nearest screen edge (or centre), so elements stay in place
- * when the window is resized and grow away from the edge they're pinned to.
+ * Positions are stored as a gap from the edge (or centre) the element is pinned to, so elements keep their place
+ * on any screen size and grow away from the edge they're pinned to.
  */
 public abstract class HudModule extends Module {
 	/** Reference screen size used for the default layout (GUI-scaled 1080p at scale 4). */
 	public static final double REF_W = 480, REF_H = 270;
 
-	private enum Anchor { START, CENTER, END }
-
 	public final NumberSetting scale;
+	/** How see-through the element is (text and box), 10-100%. */
+	public final NumberSetting opacity;
 
 	private final double defaultX, defaultY;
-	private double fx, fy;
-	private Anchor anchorX = Anchor.START, anchorY = Anchor.START;
+	/**
+	 * Position: the element's anchor point (ax, ay in {0, 0.5, 1} of its own box) sits at ax * screen width + ox,
+	 * ay * screen height + oy. So an element pinned to the right keeps the same gap to the right edge on any screen,
+	 * and grows away from the edge it is pinned to.
+	 */
+	private float ax, ay;
+	private double ox, oy;
+	/** The anchor was picked by hand in the HUD editor (otherwise it follows where the element sits). */
+	private boolean manualAnchor;
+	/** Name of the group this element moves with in the HUD editor, or null. */
+	private String group;
 	private int lastX, lastY, lastW, lastH;
 	/** Set until the first render, when the default spot is converted into an edge-anchored position. */
 	private boolean needsDefaultPlacement;
+	/** Old configs stored fractions of the screen; converted on the first render, when the screen size is known. */
+	private double legacyFx = -1, legacyFy;
+	private String legacyAx, legacyAy;
 
 	protected HudModule(String id, String name, String description, boolean enabledByDefault, double refX, double refY) {
 		this(id, name, description, Category.HUD, enabledByDefault, refX, refY);
@@ -31,6 +43,7 @@ public abstract class HudModule extends Module {
 	protected HudModule(String id, String name, String description, Category category, boolean enabledByDefault, double refX, double refY) {
 		super(id, name, description, category, enabledByDefault);
 		this.scale = add(new NumberSetting("scale", "Scale", 1.0, 0.5, 2.5, 0.05, "x"));
+		this.opacity = add(new NumberSetting("opacity", "Opacity", 100, 10, 100, 5, "%"));
 		this.defaultX = refX;
 		this.defaultY = refY;
 		resetPosition();
@@ -56,6 +69,14 @@ public abstract class HudModule extends Module {
 	protected void endRender() {
 	}
 
+	/** {@code argb} with this element's opacity applied. */
+	protected int fade(int argb) {
+		float o = opacity.getFloat() / 100f;
+		if (o >= 0.999f) return argb;
+		int a = Math.max(4, Math.round((argb >>> 24) * o));
+		return (a << 24) | (argb & 0xFFFFFF);
+	}
+
 	public final void render(Gfx g, int screenW, int screenH, boolean preview) {
 		if (!preview && !hasContent()) return;
 		beginRender(preview);
@@ -66,22 +87,35 @@ public abstract class HudModule extends Module {
 		}
 	}
 
+	/** Size on screen right now (scale applied). */
+	public int scaledWidth(boolean preview) {
+		return Math.max(1, (int) Math.ceil(width(preview) * scale.getFloat()));
+	}
+
+	public int scaledHeight(boolean preview) {
+		return Math.max(1, (int) Math.ceil(height(preview) * scale.getFloat()));
+	}
+
 	private void place(Gfx g, int screenW, int screenH, boolean preview) {
 		float s = scale.getFloat();
-		int w = Math.max(1, (int) Math.ceil(width(preview) * s));
-		int h = Math.max(1, (int) Math.ceil(height(preview) * s));
-		if (needsDefaultPlacement) {
-			needsDefaultPlacement = false;
-			lastW = w;
-			lastH = h;
-			setPosition((int) Math.round(defaultX / REF_W * screenW), (int) Math.round(defaultY / REF_H * screenH), screenW, screenH);
-		}
-		int x = resolve(fx, anchorX, w, screenW);
-		int y = resolve(fy, anchorY, h, screenH);
-		lastX = x;
-		lastY = y;
+		int w = scaledWidth(preview), h = scaledHeight(preview);
 		lastW = w;
 		lastH = h;
+		if (needsDefaultPlacement) {
+			needsDefaultPlacement = false;
+			setPosition((int) Math.round(defaultX / REF_W * screenW), (int) Math.round(defaultY / REF_H * screenH), screenW, screenH);
+		} else if (legacyFx >= 0) {
+			// fx was the anchored edge as a fraction of the screen
+			double ex = legacyFx * screenW, ey = legacyFy * screenH;
+			int x = (int) Math.round("CENTER".equals(legacyAx) ? ex - w / 2.0 : "END".equals(legacyAx) ? ex - w : ex);
+			int y = (int) Math.round("CENTER".equals(legacyAy) ? ey - h / 2.0 : "END".equals(legacyAy) ? ey - h : ey);
+			legacyFx = -1;
+			setPosition(x, y, screenW, screenH);
+		}
+		int x = (int) Math.round(Math.max(0, Math.min(screenW - w, ax * screenW + ox - ax * w)));
+		int y = (int) Math.round(Math.max(0, Math.min(screenH - h, ay * screenH + oy - ay * h)));
+		lastX = x;
+		lastY = y;
 		g.push();
 		g.translate(x, y);
 		g.scale(s);
@@ -89,45 +123,81 @@ public abstract class HudModule extends Module {
 		g.pop();
 	}
 
-	private static int resolve(double f, Anchor anchor, int size, int screen) {
-		double edge = f * screen;
-		double start;
-		switch (anchor) {
-			case CENTER: start = edge - size / 2.0; break;
-			case END: start = edge - size; break;
-			default: start = edge; break;
-		}
-		return (int) Math.round(Math.max(0, Math.min(screen - size, start)));
-	}
-
-	/** Moves the element so its top-left is at (x, y), re-picking the anchor from where it now sits. */
+	/** Moves the element so its top-left is at (x, y). Unless the anchor was picked by hand, re-picks it from where the element now sits. */
 	public void setPosition(int x, int y, int screenW, int screenH) {
 		int w = Math.max(1, lastW), h = Math.max(1, lastH);
 		x = Math.max(0, Math.min(screenW - w, x));
 		y = Math.max(0, Math.min(screenH - h, y));
-		double cx = x + w / 2.0, cy = y + h / 2.0;
-		anchorX = cx < screenW / 3.0 ? Anchor.START : cx > screenW * 2 / 3.0 ? Anchor.END : Anchor.CENTER;
-		anchorY = cy < screenH / 3.0 ? Anchor.START : cy > screenH * 2 / 3.0 ? Anchor.END : Anchor.CENTER;
-		switch (anchorX) {
-			case CENTER: fx = cx / screenW; break;
-			case END: fx = (x + w) / (double) screenW; break;
-			default: fx = x / (double) screenW; break;
+		if (!manualAnchor) {
+			double cx = x + w / 2.0, cy = y + h / 2.0;
+			ax = cx < screenW / 3.0 ? 0 : cx > screenW * 2 / 3.0 ? 1 : 0.5f;
+			ay = cy < screenH / 3.0 ? 0 : cy > screenH * 2 / 3.0 ? 1 : 0.5f;
 		}
-		switch (anchorY) {
-			case CENTER: fy = cy / screenH; break;
-			case END: fy = (y + h) / (double) screenH; break;
-			default: fy = y / (double) screenH; break;
-		}
-		lastX = x;
-		lastY = y;
+		moveTo(x, y, screenW, screenH);
+	}
+
+	/** Moves the element so its top-left is at (x, y), keeping its anchor (no clamping: groups clamp as a whole). */
+	public void moveTo(double x, double y, int screenW, int screenH) {
+		int w = Math.max(1, lastW), h = Math.max(1, lastH);
+		ox = x + ax * w - ax * screenW;
+		oy = y + ay * h - ay * screenH;
+		lastX = (int) Math.round(x);
+		lastY = (int) Math.round(y);
+	}
+
+	/** Pins the element to a side, corner or the centre (each 0, 0.5 or 1), keeping where it is on screen. */
+	public void setAnchor(float ax, float ay, boolean manual, int screenW, int screenH) {
+		int x = lastX, y = lastY;
+		this.ax = ax;
+		this.ay = ay;
+		this.manualAnchor = manual;
+		moveTo(x, y, screenW, screenH);
+	}
+
+	public float anchorX() {
+		return ax;
+	}
+
+	public float anchorY() {
+		return ay;
+	}
+
+	public boolean manualAnchor() {
+		return manualAnchor;
+	}
+
+	public String group() {
+		return group;
+	}
+
+	public void setGroup(String group) {
+		this.group = group;
 	}
 
 	public void resetPosition() {
-		anchorX = Anchor.START;
-		anchorY = Anchor.START;
-		fx = defaultX / REF_W;
-		fy = defaultY / REF_H;
+		ax = ay = 0;
+		ox = defaultX;
+		oy = defaultY;
+		manualAnchor = false;
+		group = null;
+		legacyFx = -1;
 		needsDefaultPlacement = true;
+	}
+
+	/** Everything the HUD editor's undo needs about the position (settings are kept by the editor). */
+	public double[] layoutState() {
+		return new double[]{ax, ay, ox, oy, manualAnchor ? 1 : 0, needsDefaultPlacement ? 1 : 0};
+	}
+
+	public void restoreLayout(double[] st, String group) {
+		ax = (float) st[0];
+		ay = (float) st[1];
+		ox = st[2];
+		oy = st[3];
+		manualAnchor = st[4] != 0;
+		needsDefaultPlacement = st[5] != 0;
+		legacyFx = -1;
+		this.group = group;
 	}
 
 	public int lastX() {
@@ -154,10 +224,13 @@ public abstract class HudModule extends Module {
 	public JsonObject save() {
 		JsonObject o = super.save();
 		JsonObject pos = new JsonObject();
-		pos.addProperty("x", fx);
-		pos.addProperty("y", fy);
-		pos.addProperty("anchorX", anchorX.name());
-		pos.addProperty("anchorY", anchorY.name());
+		pos.addProperty("v", 2);
+		pos.addProperty("ax", ax);
+		pos.addProperty("ay", ay);
+		pos.addProperty("ox", ox);
+		pos.addProperty("oy", oy);
+		pos.addProperty("manual", manualAnchor);
+		if (group != null) pos.addProperty("group", group);
 		o.add("position", pos);
 		return o;
 	}
@@ -168,10 +241,23 @@ public abstract class HudModule extends Module {
 		if (o.has("position") && o.get("position").isJsonObject()) {
 			JsonObject pos = o.getAsJsonObject("position");
 			try {
-				fx = pos.get("x").getAsDouble();
-				fy = pos.get("y").getAsDouble();
-				anchorX = Anchor.valueOf(pos.get("anchorX").getAsString());
-				anchorY = Anchor.valueOf(pos.get("anchorY").getAsString());
+				if (pos.has("v")) {
+					ax = pos.get("ax").getAsFloat();
+					ay = pos.get("ay").getAsFloat();
+					ox = pos.get("ox").getAsDouble();
+					oy = pos.get("oy").getAsDouble();
+					manualAnchor = pos.has("manual") && pos.get("manual").getAsBoolean();
+					group = pos.has("group") ? pos.get("group").getAsString() : null;
+					legacyFx = -1;
+				} else {
+					// before the anchored layout: fractions of the screen, converted on the first render
+					legacyFx = pos.get("x").getAsDouble();
+					legacyFy = pos.get("y").getAsDouble();
+					legacyAx = pos.get("anchorX").getAsString();
+					legacyAy = pos.get("anchorY").getAsString();
+					group = null;
+					manualAnchor = false;
+				}
 				needsDefaultPlacement = false;
 			} catch (RuntimeException e) {
 				resetPosition();

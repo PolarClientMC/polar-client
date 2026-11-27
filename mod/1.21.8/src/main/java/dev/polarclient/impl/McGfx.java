@@ -15,7 +15,6 @@ import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.item.ItemStack;
 
-import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +27,7 @@ public final class McGfx implements Gfx {
 	/** Virtual texture size for sub-pixel UVs: blit() takes texel offsets, so 0..1 UVs are scaled up to this. */
 	private static final int UV = 1 << 14;
 	private static final Map<String, ResourceLocation> TEXTURES = new HashMap<>();
-	private static final Map<UiFont, ResourceLocation> FONTS = new EnumMap<>(UiFont.class);
+	private static final Map<String, ResourceLocation> FONTS = new HashMap<>();
 	private static final Map<UUID, Component> HEADS = new HashMap<>();
 
 	private GuiGraphics g;
@@ -51,7 +50,7 @@ public final class McGfx implements Gfx {
 
 	static Component styled(String s, UiFont font) {
 		if (font == UiFont.VANILLA) return Component.literal(s);
-		ResourceLocation d = FONTS.computeIfAbsent(font, f -> ResourceLocation.fromNamespaceAndPath("polarclient", f.id()));
+		ResourceLocation d = FONTS.computeIfAbsent(font.id(dev.polarclient.gui.ui.Ui.scale()), k -> ResourceLocation.fromNamespaceAndPath("polarclient", k));
 		return Component.literal(s).withStyle(style -> style.withFont(d));
 	}
 

@@ -33,6 +33,15 @@ public enum UiFont {
 		return iconBox > 0;
 	}
 
+	/**
+	 * The font definition drawn at {@code pixelsPerUnit} screen pixels per GUI unit. The game draws font glyphs without
+	 * smoothing, so a glyph made at a different density than it is shown at looks jagged; each density has its own.
+	 */
+	public String id(int pixelsPerUnit) {
+		if (this == VANILLA) return id();
+		return id() + "_x" + Math.max(1, Math.min(6, pixelsPerUnit));
+	}
+
 	/** Resource id (polarclient:<id>) of the font definition. */
 	public String id() {
 		switch (this) {

@@ -30,7 +30,6 @@ import net.minecraft.world.item.ItemStack;
 import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.Deque;
-import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -48,7 +47,7 @@ public final class McGfx implements Gfx {
 	private static final McGfx INSTANCE = new McGfx();
 	private static final int GL_QUADS = 7, GL_FLAT = 7424, GL_SMOOTH = 7425, GL_GREATER = 516, GL_DEPTH_BUFFER_BIT = 256;
 	private static final Map<String, ResourceLocation> TEXTURES = new HashMap<String, ResourceLocation>();
-	private static final Map<UiFont, ResourceLocation> FONTS = new EnumMap<UiFont, ResourceLocation>(UiFont.class);
+	private static final Map<String, ResourceLocation> FONTS = new HashMap<>();
 	private static final Map<UUID, ResourceLocation> SKINS = Collections.synchronizedMap(new HashMap<UUID, ResourceLocation>());
 	private static final Set<UUID> SKIN_REQUESTS = new HashSet<UUID>();
 
@@ -79,8 +78,9 @@ public final class McGfx implements Gfx {
 
 	static Component styled(String s, UiFont font) {
 		if (font == UiFont.VANILLA) return new TextComponent(s);
-		ResourceLocation id = FONTS.get(font);
-		if (id == null) FONTS.put(font, id = new ResourceLocation("polarclient", font.id()));
+		String key = font.id(dev.polarclient.gui.ui.Ui.scale());
+		ResourceLocation id = FONTS.get(key);
+		if (id == null) FONTS.put(key, id = new ResourceLocation("polarclient", key));
 		final ResourceLocation fontId = id;
 		return new TextComponent(s).withStyle(style -> style.withFont(fontId));
 	}

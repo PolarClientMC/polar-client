@@ -443,6 +443,31 @@ public abstract class Platform {
 		return null;
 	}
 
+	/** The open container, when it is a plain box: "chest", "ender" (an ender chest) or "shulker"; else null. */
+	public String boxKind() {
+		return null;
+	}
+
+	/** What is in the open box's own slots (not the player's inventory), empty slots as null; null when no box is open. */
+	public List<ItemView> boxSlots() {
+		return null;
+	}
+
+	/** Whether two stacks are the same item with the same data (any count). */
+	public boolean sameItem(ItemView a, ItemView b) {
+		return false;
+	}
+
+	/** A key to sort items by, grouping the same item together. */
+	public String itemKey(ItemView item) {
+		return item == null ? "" : itemName(item);
+	}
+
+	/** Whether the player is holding a stack on the mouse in the open container. */
+	public boolean carryingItem() {
+		return false;
+	}
+
 	/** Clicks a slot of the open container (pickup, button 0 = left), as the player would. False when nothing is open. */
 	public boolean clickSlot(int slot, int button) {
 		return false;

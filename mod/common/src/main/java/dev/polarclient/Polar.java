@@ -48,6 +48,7 @@ public final class Polar {
 		CombatTracker.tick();
 		dev.polarclient.world.SessionStats.tick(p);
 		dev.polarclient.world.LastServer.tick(p);
+		dev.polarclient.hooks.BoxSorter.tick(p);
 		dev.polarclient.social.PolarSocial.tick();
 		for (Module m : modules.all()) {
 			try {

@@ -80,6 +80,7 @@ public final class ViewScreen extends Screen {
 		else if (key == InputConstants.KEY_Z) k = KeyInput.Key.Z;
 		else if (key == InputConstants.KEY_Y) k = KeyInput.Key.Y;
 		else if (key == InputConstants.KEY_G) k = KeyInput.Key.G;
+		else if (key == InputConstants.KEY_F) k = KeyInput.Key.F;
 		else k = KeyInput.Key.OTHER;
 		boolean shift = (modifiers & org.lwjgl.glfw.GLFW.GLFW_MOD_SHIFT) != 0;
 		boolean ctrl = (modifiers & org.lwjgl.glfw.GLFW.GLFW_MOD_CONTROL) != 0;

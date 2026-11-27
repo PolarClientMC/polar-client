@@ -2,7 +2,7 @@ package dev.polarclient.gui;
 
 /** A key press, translated by the version into the keys Polar's views care about. */
 public final class KeyInput {
-	public enum Key { ESCAPE, ENTER, BACKSPACE, DELETE, LEFT, RIGHT, UP, DOWN, HOME, END, TAB, F5, A, C, V, X, Z, Y, G, OTHER }
+	public enum Key { ESCAPE, ENTER, BACKSPACE, DELETE, LEFT, RIGHT, UP, DOWN, HOME, END, TAB, F5, A, C, V, X, Z, Y, G, F, OTHER }
 
 	public final Key key;
 	public final boolean shift, control;

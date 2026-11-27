@@ -940,6 +940,60 @@ public final class McPlatform extends Platform {
 	// ------------------------------------------------------------------ HUD data
 
 	@Override
+	public String boxKind() {
+		if (player() == null || !(currentScreen() instanceof net.minecraft.client.gui.screens.inventory.AbstractContainerScreen)) return null;
+		net.minecraft.world.inventory.AbstractContainerMenu m = player().containerMenu;
+		if (m instanceof net.minecraft.world.inventory.ShulkerBoxMenu) return "shulker";
+		if (m instanceof net.minecraft.world.inventory.ChestMenu) {
+			return ((net.minecraft.world.inventory.ChestMenu) m).getContainer() == player().getEnderChestInventory() ? "ender" : "chest";
+		}
+		return null;
+	}
+
+	@Override
+	public List<ItemView> boxSlots() {
+		if (boxKind() == null) return null;
+		net.minecraft.world.inventory.AbstractContainerMenu m = player().containerMenu;
+		int n = m instanceof net.minecraft.world.inventory.ChestMenu ? ((net.minecraft.world.inventory.ChestMenu) m).getRowCount() * 9 : 27;
+		if (m.slots.size() < n) return null;
+		List<ItemView> out = new ArrayList<>();
+		for (int i = 0; i < n; i++) {
+			ItemStack s = m.slots.get(i).getItem();
+			out.add(s.isEmpty() ? null : view(s));
+		}
+		return out;
+	}
+
+	@Override
+	public boolean sameItem(ItemView a, ItemView b) {
+		if (a == null || b == null || !(a.handle instanceof ItemStack) || !(b.handle instanceof ItemStack)) return false;
+		ItemStack x = (ItemStack) a.handle, y = (ItemStack) b.handle;
+		return (ItemStack.isSame(x, y) && ItemStack.tagMatches(x, y));
+	}
+
+	@Override
+	public String itemKey(ItemView item) {
+		if (item == null || !(item.handle instanceof ItemStack)) return "";
+		String id = ((ItemStack) item.handle).getItem().getDescriptionId();
+		int dot = id.lastIndexOf('.');
+		return (dot >= 0 ? id.substring(dot + 1) : id) + "|" + itemName(item);
+	}
+
+	@Override
+	public boolean carryingItem() {
+		return player() != null && !player().inventory.getCarried().isEmpty();
+	}
+
+	@Override
+	public boolean clickSlot(int slot, int button) {
+		if (player() == null || mc().gameMode == null) return false;
+		net.minecraft.world.inventory.AbstractContainerMenu m = player().containerMenu;
+		if (m == null || slot < 0 || slot >= m.slots.size()) return false;
+		mc().gameMode.handleInventoryMouseClick(m.containerId, slot, button, net.minecraft.world.inventory.ClickType.PICKUP, player());
+		return true;
+	}
+
+	@Override
 	public String skinKind(Object s) {
 		if (s instanceof net.minecraft.client.gui.screens.DeathScreen) return "death";
 		if (s instanceof net.minecraft.client.gui.screens.ConnectScreen) return "connect";

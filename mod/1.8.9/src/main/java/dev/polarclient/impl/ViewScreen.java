@@ -91,6 +91,7 @@ public final class ViewScreen extends Screen {
 			case Keyboard.KEY_Z: k = KeyInput.Key.Z; break;
 			case Keyboard.KEY_Y: k = KeyInput.Key.Y; break;
 			case Keyboard.KEY_G: k = KeyInput.Key.G; break;
+			case Keyboard.KEY_F: k = KeyInput.Key.F; break;
 			default: k = KeyInput.Key.OTHER;
 		}
 		return new KeyInput(k, hasShiftDown(), hasControlDown(), code != 0 && code == Keys.get(PolarKey.MENU).getCode());

@@ -15,6 +15,7 @@ public class ClientSettingsModule extends Module {
 	public final BooleanSetting customServerList = add(new BooleanSetting("custom_server_list", "Polar server list", true));
 	public final BooleanSetting customPauseMenu = add(new BooleanSetting("custom_pause_menu", "Polar pause menu", true));
 	public final BooleanSetting customGameScreens = add(new BooleanSetting("custom_game_screens", "Polar death and disconnect screens", true));
+	public final BooleanSetting chestSort = add(new BooleanSetting("chest_sort", "Sort button on chests and shulker boxes", true));
 	public final BooleanSetting autoRetry = add(new BooleanSetting("auto_retry", "Retry lost connections by itself", false));
 	public final BooleanSetting snow = add(new BooleanSetting("snow", "Snowfall on the main menu", true));
 	public final ModeSetting seasonal = add(new ModeSetting("seasonal", "Seasonal main menu (Christmas)", "Auto", "Auto", "Always", "Off"));

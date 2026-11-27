@@ -853,24 +853,7 @@ handle('polar:state', () => polarState());
 handle('polar:signIn', async () => {
   const { selected } = store.listAccounts();
   if (!selected) throw new Error('Add an account first.');
-  try {
-    await polar.signIn(await freshAccount(selected));
-  } catch (e) {
-    // an offline profile's name that another PC uses on Polar: the page offers to paste that PC's key
-    if (e.code === 'name-taken') return { ...(await polarState()), taken: e.message };
-    throw e;
-  }
-  polar.connect();
-  return polarState();
-});
-handle('polar:offlineKey', (uuid) => {
-  const acc = store.getAccount(uuid);
-  if (!acc || acc.type !== 'offline') throw new Error('Polar keys are for offline profiles.');
-  return polar.offlineKey(acc);
-});
-handle('polar:useOfflineKey', async (key) => {
-  const { selected } = store.listAccounts();
-  await polar.useOfflineKey(selected ? store.getAccount(selected) : null, key);
+  await polar.signIn(await freshAccount(selected));
   polar.connect();
   return polarState();
 });

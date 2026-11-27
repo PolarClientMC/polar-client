@@ -3,7 +3,7 @@
 // cosmetics are shown to other Polar players.
 import catalog from './catalog.js';
 import { signToken, readToken, sameSecret, randomHex } from './token.js';
-import { offlineUuid, isOfflineUuid, sha256Hex } from './offline.js';
+import { offlineUuid, isOfflineUuid } from './offline.js';
 
 export const SLOTS = ['cape', 'wings', 'head', 'back', 'aura'];
 let ITEMS = new Map(catalog.items.map((i) => [i.id, i]));
@@ -299,32 +299,20 @@ export class Hub {
   }
 
   /**
-   * Offline profiles have no Minecraft account to ask Mojang about. The launcher makes a random key for each one, and
-   * the first PC to sign in with a name keeps it: later sign-ins with that name need the same key, so nobody else can
-   * be "you" on Polar. The key moves to another PC by copying it (Accounts in the launcher).
+   * Offline profiles have no Minecraft account to ask Mojang about, so the name is all there is: whoever signs in with
+   * an offline name is that profile on Polar (same id the game uses for it). Older launchers still send a key; it is
+   * ignored.
    */
   async offlineSignIn(request) {
     const ip = this.ip(request);
     this.limit(`o:${ip}`, 30);
-    const { name, key } = await body(request);
+    const { name } = await body(request);
     if (!NAME.test(String(name)) || String(name).length < 3) throw new HttpError(400, 'Offline profile names are 3-16 letters, numbers or underscores.');
-    if (!/^[0-9a-f]{64}$/.test(String(key))) throw new HttpError(400, 'Bad sign-in request');
     const uuid = offlineUuid(name);
-    const hash = await sha256Hex(key);
     const now = Date.now();
-    const taken = () => new HttpError(409, `${name} is already used on Polar from another PC. If that's you, copy its Polar key from the launcher there (Accounts, the key next to ${name}) and paste it here. Otherwise pick another name.`, { code: 'name-taken' });
     this.ctx.storage.transactionSync(() => {
-      const row = this.sql.exec('SELECT key_hash FROM offline_keys WHERE uuid = ?', uuid).toArray()[0];
-      if (row) {
-        if (!sameSecret(row.key_hash, hash)) throw taken();
-      } else {
-        // "Steve" and "steve" are different players in Minecraft, but too easy to mix up on Polar
-        const twin = this.sql.exec(`SELECT p.uuid FROM players p JOIN offline_keys k ON k.uuid = p.uuid
-          WHERE p.name = ? COLLATE NOCASE AND p.uuid != ?`, name, uuid).toArray()[0];
-        if (twin) throw taken();
-        this.limit(`on:${ip}`, 20, 3600 * 1000); // new names per hour from one address
-        this.sql.exec('INSERT INTO offline_keys (uuid, key_hash, created) VALUES (?, ?, ?)', uuid, hash, now);
-      }
+      const known = this.player(uuid);
+      if (!known || !known.first_seen) this.limit(`on:${ip}`, 20, 3600 * 1000); // new names per hour from one address
       this.sql.exec(`INSERT INTO players (uuid, name, first_seen, last_seen) VALUES (?, ?, ?, ?)
         ON CONFLICT (uuid) DO UPDATE SET name = excluded.name, last_seen = excluded.last_seen,
         first_seen = CASE WHEN players.first_seen = 0 THEN excluded.first_seen ELSE players.first_seen END`, uuid, name, now, now);
@@ -1019,7 +1007,7 @@ export class Hub {
     const one = (q) => Object.values(this.sql.exec(q).toArray()[0])[0];
     return {
       players: one('SELECT COUNT(*) FROM players WHERE first_seen > 0'),
-      offline: one('SELECT COUNT(*) FROM offline_keys'),
+      offline: one("SELECT COUNT(*) FROM players WHERE uuid LIKE '________-____-3___-%' AND first_seen > 0"),
       online: this.onlineNow(),
       today: one(`SELECT COUNT(*) FROM players WHERE last_seen > ${Date.now() - 86400000}`),
       grants: one('SELECT COUNT(*) FROM grants'),

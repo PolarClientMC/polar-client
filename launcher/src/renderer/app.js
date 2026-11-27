@@ -2008,7 +2008,6 @@ function renderAccounts() {
     h('img', { src: avatarUrl(a), alt: '' }),
     h('span', { class: 'name', text: a.name }),
     h('span', { class: `badge-type${a.type === 'offline' ? ' offline' : ''}`, text: a.type === 'offline' ? 'Offline' : 'Microsoft' }),
-    a.type === 'offline' ? h('button', { class: 'key', title: `Copy ${a.name}'s Polar key, to use this profile on Polar from another PC`, onclick: () => copyPolarKey(a) }, icon('i-lock')) : null,
     h('button', { class: 'remove', 'data-remove': a.uuid, text: 'Remove', onclick: () => removeAccount(a) }))) : [h('div', { class: 'empty', text: 'No accounts yet.' })]));
   $('offlineName').disabled = false;
   $('addOffline').disabled = false;
@@ -2131,41 +2130,10 @@ async function polarReady(gateId, bodyId) {
     } catch (e) {
       return show("Couldn't sign in to Polar", e.message, h('button', { class: 'btn primary', onclick: reopen }, 'Try again'));
     }
-    if (st.taken) return show(`${st.account.name} is taken on Polar`, st.taken, keyForm(reopen));
   }
   gate.hidden = true;
   body.hidden = false;
   return st;
-}
-
-/** Pasting the Polar key of an offline profile from another PC (when this PC can't use the name on Polar). */
-function keyForm(done) {
-  const input = h('input', { type: 'text', placeholder: 'Paste the Polar key from your other PC', spellcheck: 'false', autocomplete: 'off' });
-  const btn = h('button', { class: 'btn primary', type: 'submit' }, 'Use key');
-  return h('form', { class: 'offline-form key-form', onsubmit: async (e) => {
-    e.preventDefault();
-    if (!input.value.trim()) return input.focus();
-    btn.disabled = true;
-    try {
-      await polar.online.useOfflineKey(input.value);
-      toast('Signed in to Polar with your key.', 'ok');
-      done();
-    } catch (err) {
-      toast(err.message, 'error', 8000);
-    } finally {
-      btn.disabled = false;
-    }
-  } }, input, btn);
-}
-
-/** Copies an offline profile's Polar key, to use the same profile on Polar from another PC. */
-async function copyPolarKey(a) {
-  try {
-    await navigator.clipboard.writeText(await polar.online.offlineKey(a.uuid));
-    toast(`Polar key for ${a.name} copied. On your other PC, add the offline profile ${a.name} and paste the key on the Cosmetics page. Keep it private: anyone with it can be ${a.name} on Polar.`, 'ok', 12000);
-  } catch (e) {
-    toast(e.message, 'error');
-  }
 }
 
 // ---------------------------------------------------------------- Polar wardrobe (Cosmetics page, first tab)

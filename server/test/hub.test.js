@@ -307,7 +307,7 @@ test('friends: requests, accepting, who is online and where, invites, removing',
 const KEY1 = 'a'.repeat(64), KEY2 = 'b'.repeat(64);
 const offline = (call, name, key, ip = '9.9.9.9') => call('POST', '/v1/auth/offline', { body: { name, key }, headers: { 'CF-Connecting-IP': ip } });
 
-test('offline profiles: Minecraft\'s offline ids, and a name belongs to the PC that first used it', async () => {
+test('offline profiles: Minecraft\'s offline ids, signed in by name alone', async () => {
   const mojang = fakeMojang();
   const { hub, call, ctx } = setup();
   // the id the game uses for an offline player: UUIDv3 of "OfflinePlayer:<name>" (Java's UUID.nameUUIDFromBytes)
@@ -322,15 +322,12 @@ test('offline profiles: Minecraft\'s offline ids, and a name belongs to the PC t
   assert.equal(r.data.offline, true);
   const tok = r.data.token;
   assert.equal((await call('GET', '/v1/me', { token: tok })).data.name, 'AdminCanyon');
-  // the same PC (same key) again: fine; another key: the name is taken, and "admincanyon" too
-  assert.equal((await offline(call, 'AdminCanyon', KEY1)).status, 200);
+  // no keys: any PC can use the name (old launchers' keys are ignored), and the id stays the same
   r = await offline(call, 'AdminCanyon', KEY2);
-  assert.equal(r.status, 409);
-  assert.equal(r.data.code, 'name-taken');
-  assert.equal((await offline(call, 'admincanyon', KEY2)).data.code, 'name-taken');
+  assert.equal(r.status, 200);
+  assert.equal(r.data.uuid, offlineUuid('AdminCanyon'));
+  assert.equal((await call('POST', '/v1/auth/offline', { body: { name: 'AdminCanyon' }, headers: { 'CF-Connecting-IP': '9.9.9.9' } })).status, 200, 'no key at all');
   assert.equal((await offline(call, 'ab', KEY1)).status, 400, 'too short');
-  assert.equal((await offline(call, 'Bob', 'nope')).status, 400, 'bad key');
-  assert.equal(ctx.db.prepare('SELECT key_hash FROM offline_keys').get().key_hash.length, 64, 'only a hash of the key is kept');
 
   // cosmetics and the badge, like any player
   assert.equal((await call('PUT', '/v1/me/loadout', { token: tok, body: { slots: { cape: 'cape_aurora' } } })).status, 200);

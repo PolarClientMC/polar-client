@@ -83,7 +83,7 @@ Polar's online features run on a small server of your own on **Cloudflare's free
 
 Signing in uses Minecraft's own server check: the launcher tells Mojang the player is joining a one-time "server" and the Polar server asks Mojang whether that happened, so Minecraft logins never reach the Polar server.
 
-**Offline profiles** use Polar too, on singleplayer, LAN and offline-mode servers (where their offline id is what other players' games see). An offline profile has no Minecraft login to check, so the launcher makes it a secret key, kept encrypted on the PC, and the first PC to use a name on Polar keeps it: nobody else can be that player on Polar, and "Steve" and "steve" count as the same name. To use the same offline profile on another PC, click the lock next to it in **Accounts** to copy its Polar key, add the profile on the other PC and paste the key on its Cosmetics page. Friends lists show an *Offline profile* tag, and the admin page counts them and marks them.
+**Offline profiles** use Polar too, on singleplayer, LAN and offline-mode servers (where their offline id is what other players' games see). An offline profile has no Minecraft login to check, so its name is all Polar goes by: anyone who plays with that offline name is that profile on Polar, on any PC (no key to copy). Friends lists show an *Offline profile* tag, and the admin page counts them and marks them.
 
 **Set it up (once):**
 

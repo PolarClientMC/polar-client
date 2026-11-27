@@ -155,7 +155,6 @@ class DiscordPresence {
  * { state: 'menu' | 'singleplayer' | 'server' | 'hidden', server? }. partner: matched partnered server, or null.
  */
 // an https image works without uploading it to the Discord app (like the partners' logos)
-const PRIVATE_SERVER_IMAGE = 'https://raw.githubusercontent.com/PolarClientMC/polar-client/main/branding/discord-private-server.png';
 
 function activityFor({ version, game, partner }) {
   const baseAssets = { large_image: 'logo', large_text: 'Polar Client' };
@@ -166,18 +165,20 @@ function activityFor({ version, game, partner }) {
 
   if (w.state === 'server') {
     if (partner) {
+      // a partner server: its name and its own logo
       return {
-        details: 'Playing on a partnered server',
-        state: partner.ip || w.server || 'Partnered server',
+        details: `Playing ${partner.name || 'a partner server'}`,
+        state: 'On a partnered server',
         timestamps: started,
-        assets: { large_image: partner.logo || 'logo', large_text: partner.name || 'Polar Client' }, // the partner's https logo
+        assets: { large_image: partner.logo || 'logo', large_text: partner.name || 'Polar Client', small_image: 'logo', small_text: 'Polar Client' },
       };
     }
+    // any other server stays private: no name or address, the Polar logo
     return {
-      details: 'Playing a private server',
+      details: 'Playing on a server',
       state: `Minecraft ${game.version}`,
       timestamps: started,
-      assets: { large_image: PRIVATE_SERVER_IMAGE, large_text: 'Private server' },
+      assets: baseAssets,
     };
   }
 

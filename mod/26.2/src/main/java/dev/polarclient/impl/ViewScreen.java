@@ -31,7 +31,7 @@ public final class ViewScreen extends Screen {
 
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float a) {
-		view.render(McGfx.of(g), mouseX, mouseY, a);
+		dev.polarclient.gui.View.renderSafely(view, McGfx.of(g), mouseX, mouseY, a);
 	}
 
 	/** SDL buttons (1 left, 2 middle, 3 right) to Polar's (0 left, 1 right, 2 middle). */
@@ -46,7 +46,7 @@ public final class ViewScreen extends Screen {
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-		return view.mouseClicked(event.x(), event.y(), button(event.button()));
+		return dev.polarclient.gui.View.clickSafely(view, event.x(), event.y(), button(event.button()));
 	}
 
 	@Override
@@ -93,7 +93,7 @@ public final class ViewScreen extends Screen {
 
 	@Override
 	public boolean keyPressed(KeyEvent event) {
-		if (view.keyPressed(key(event))) return true;
+		if (dev.polarclient.gui.View.keySafely(view, key(event))) return true;
 		if (event.isEscape() && view.closeOnEscape()) {
 			view.onClose();
 			return true;
@@ -111,7 +111,7 @@ public final class ViewScreen extends Screen {
 
 	@Override
 	public void tick() {
-		view.tick();
+		dev.polarclient.gui.View.tickSafely(view);
 	}
 
 	@Override

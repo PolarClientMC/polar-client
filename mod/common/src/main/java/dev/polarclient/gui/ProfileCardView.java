@@ -94,7 +94,7 @@ public class ProfileCardView extends View {
 			Ui.textMid(g, failed ? "Couldn't load this profile" : "Loading...", tx, y + 36, MUTED, Fonts.SMALL);
 			return;
 		}
-		if (!profile.has("polar") || !profile.get("polar").getAsBoolean()) {
+		if (!profile.has("polar") || !profile.get("polar").isJsonPrimitive() || !profile.get("polar").getAsBoolean()) {
 			Ui.textMid(g, "Not on Polar Client", tx, y + 36, MUTED, Fonts.BODY);
 			Ui.textMid(g, "They don't use Polar, so there's", tx, y + 52, 0xFF7C8DA6, Fonts.SMALL);
 			Ui.textMid(g, "no profile to show.", tx, y + 61, 0xFF7C8DA6, Fonts.SMALL);
@@ -124,18 +124,18 @@ public class ProfileCardView extends View {
 		String st = "online".equals(status) ? "Online" : "busy".equals(status) ? "Busy" : "away".equals(status) ? "Away" : "Offline";
 		Ui.textMid(g, Fonts.ellipsize(st + where, Fonts.SMALL, (int) (W - 100)), tx + 8, ly, 0xFFDCEBFF, Fonts.SMALL);
 		ly += 11;
-		long since = profile.has("since") ? profile.get("since").getAsLong() : 0;
+		long since = profile.has("since") && profile.get("since").isJsonPrimitive() ? profile.get("since").getAsLong() : 0;
 		if (since > 0) {
 			Ui.textMid(g, "Polar player since " + new SimpleDateFormat("MMMM yyyy", Locale.ENGLISH).format(new Date(since)), tx, ly, MUTED, Fonts.SMALL);
 			ly += 11;
 		}
 		List<String> wearing = new ArrayList<String>();
-		if (profile.has("wearing") && profile.get("wearing").isJsonArray()) for (JsonElement e : profile.getAsJsonArray("wearing")) wearing.add(e.getAsString());
+		if (profile.has("wearing") && profile.get("wearing").isJsonArray()) for (JsonElement e : profile.getAsJsonArray("wearing")) if (e.isJsonPrimitive()) wearing.add(e.getAsString());
 		Ui.textMid(g, "Wearing", x + 16, y + 84, 0xFF5E7290, Fonts.SMALL);
 		Ui.textMid(g, Fonts.ellipsize(wearing.isEmpty() ? "No cosmetics" : String.join(", ", wearing), Fonts.SMALL, (int) (W - 32)), x + 16, y + 94, 0xFFDCEBFF, Fonts.SMALL);
 
 		// what you can do
-		boolean me = profile.has("me") && profile.get("me").getAsBoolean();
+		boolean me = profile.has("me") && profile.get("me").isJsonPrimitive() && profile.get("me").getAsBoolean();
 		String friend = s(profile, "friend");
 		final String theirId = s(profile, "uuid");
 		float by = y + H - 30, bw3 = (W - 36) / 3f;

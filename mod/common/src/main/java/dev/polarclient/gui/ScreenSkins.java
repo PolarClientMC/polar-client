@@ -80,7 +80,7 @@ public final class ScreenSkins {
 
 	/** Whether Polar draws this screen. */
 	public static boolean wants(Object screen) {
-		if (screen == null || Polar.modules() == null || !Polar.modules().client.customGameScreens.on()) return false;
+		if (broken || screen == null || Polar.modules() == null || !Polar.modules().client.customGameScreens.on()) return false;
 		return p().skinKind(screen) != null;
 	}
 
@@ -114,6 +114,24 @@ public final class ScreenSkins {
 
 	/** The buttons Polar adds to this screen, given the vanilla ones (call after the vanilla init). */
 	public static List<Extra> extras(Object screen, int width, int height, List<Widget> buttons) {
+		try {
+			return extrasUnsafe(screen, width, height, buttons);
+		} catch (RuntimeException e) {
+			broke(e);
+			extras = Collections.emptyList();
+			return extras;
+		}
+	}
+
+	private static boolean broken;
+
+	/** Something in Polar's look failed: log it once and leave these screens vanilla for the rest of the session. */
+	private static void broke(RuntimeException e) {
+		if (!broken) dev.polarclient.Log.error("Polar's look for a game screen failed; using the vanilla screen", e);
+		broken = true;
+	}
+
+	private static List<Extra> extrasUnsafe(Object screen, int width, int height, List<Widget> buttons) {
 		List<Extra> out = new ArrayList<Extra>();
 		if (!wants(screen) || buttons.isEmpty()) {
 			extras = out;
@@ -147,6 +165,14 @@ public final class ScreenSkins {
 
 	/** One of Polar's buttons was clicked. */
 	public static void press(String id) {
+		try {
+			pressUnsafe(id);
+		} catch (RuntimeException e) {
+			broke(e);
+		}
+	}
+
+	private static void pressUnsafe(String id) {
 		if ("death_copy".equals(id)) {
 			p().setClipboard(block(deathX) + " " + block(deathY) + " " + block(deathZ));
 			say("Coordinates copied");
@@ -193,6 +219,15 @@ public final class ScreenSkins {
 	/** Draws the screen in Polar's style. False to let vanilla draw it after all. */
 	public static boolean render(Gfx g, Object screen, int width, int height, List<Widget> buttons, int mouseX, int mouseY) {
 		if (!wants(screen)) return false;
+		try {
+			return renderUnsafe(g, screen, width, height, buttons, mouseX, mouseY);
+		} catch (RuntimeException e) {
+			broke(e);
+			return false;
+		}
+	}
+
+	private static boolean renderUnsafe(Gfx g, Object screen, int width, int height, List<Widget> buttons, int mouseX, int mouseY) {
 		String kind = p().skinKind(screen);
 		opened(screen, kind);
 		Ui.frame();

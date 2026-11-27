@@ -94,4 +94,56 @@ public abstract class View {
 	public int height() {
 		return height;
 	}
+
+	// ------------------------------------------------------------------ a screen that breaks closes instead of crashing
+
+	private boolean broken;
+
+	/** The screen hit a bug: log it, close it on the next tick and say so, instead of crashing the game. */
+	private static void broke(final View v, RuntimeException e) {
+		if (v.broken) return;
+		v.broken = true;
+		dev.polarclient.Log.error("The " + v.title() + " screen failed; closing it", e);
+		dev.polarclient.util.Popups.show(v.title() + " hit a problem and was closed", 0xFFFF6B6B, 4000);
+		final Platform p = Platform.get();
+		if (p != null) p.execute(() -> p.show(v.parent));
+	}
+
+	public static void renderSafely(View v, Gfx g, int mouseX, int mouseY, float partialTicks) {
+		if (v.broken) return;
+		try {
+			v.render(g, mouseX, mouseY, partialTicks);
+		} catch (RuntimeException e) {
+			broke(v, e);
+		}
+	}
+
+	public static boolean clickSafely(View v, double mx, double my, int button) {
+		if (v.broken) return true;
+		try {
+			return v.mouseClicked(mx, my, button);
+		} catch (RuntimeException e) {
+			broke(v, e);
+			return true;
+		}
+	}
+
+	public static boolean keySafely(View v, KeyInput key) {
+		if (v.broken) return false;
+		try {
+			return v.keyPressed(key);
+		} catch (RuntimeException e) {
+			broke(v, e);
+			return true;
+		}
+	}
+
+	public static void tickSafely(View v) {
+		if (v.broken) return;
+		try {
+			v.tick();
+		} catch (RuntimeException e) {
+			broke(v, e);
+		}
+	}
 }

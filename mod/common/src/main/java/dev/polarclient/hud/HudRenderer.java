@@ -33,12 +33,30 @@ public final class HudRenderer {
 		int w = g.width(), h = g.height();
 		for (HudModule module : modules.hud()) {
 			if (module == modules.tabList) continue; // drawn where the game draws its player list
-			if (module.isEnabled() && module.unavailableReason() == null) module.render(g, w, h, false);
+			if (module.isEnabled() && module.unavailableReason() == null) {
+				try {
+					module.render(g, w, h, false);
+				} catch (RuntimeException e) {
+					failed(module, e);
+				}
+			}
 		}
 		for (Module module : modules.all()) {
-			if (module.isEnabled() && !(module instanceof HudModule)) module.renderOverlay(g);
+			if (!module.isEnabled() || module instanceof HudModule) continue;
+			try {
+				module.renderOverlay(g);
+			} catch (RuntimeException e) {
+				failed(module, e);
+			}
 		}
 		Popups.render(g);
+	}
+
+	/** A HUD mod that broke while drawing: switched off with a note, instead of crashing the game. */
+	private static void failed(Module module, RuntimeException e) {
+		dev.polarclient.Log.error("HUD mod " + module.id() + " failed while drawing; switching it off", e);
+		module.setEnabled(false);
+		Popups.show(module.name() + " hit a problem and was switched off", 0xFFFF6B6B, 4000);
 	}
 
 	/** Polar's Tab List, drawn in place of the game's player list (each version calls this from that spot). */

@@ -46,11 +46,12 @@ public final class Polar {
 			if (!p.screenOpen()) p.open(new HudEditorView(null));
 		}
 		CombatTracker.tick();
-		dev.polarclient.world.SessionStats.tick(p);
-		dev.polarclient.world.LastServer.tick(p);
-		dev.polarclient.hooks.BoxSorter.tick(p);
-		if (modules.worldMap.isEnabled()) dev.polarclient.world.WorldMapStore.tick(p);
-		dev.polarclient.social.PolarSocial.tick();
+		// each part on its own, so one going wrong can't stop the others (or the game)
+		safely("session stats", () -> dev.polarclient.world.SessionStats.tick(p));
+		safely("last server", () -> dev.polarclient.world.LastServer.tick(p));
+		safely("chest sorting", () -> dev.polarclient.hooks.BoxSorter.tick(p));
+		if (modules.worldMap.isEnabled()) safely("world map", () -> dev.polarclient.world.WorldMapStore.tick(p));
+		safely("friends", dev.polarclient.social.PolarSocial::tick);
 		for (Module m : modules.all()) {
 			try {
 				m.tick();
@@ -58,6 +59,17 @@ public final class Polar {
 				Log.error("Module " + m.id() + " failed during tick; disabling it", e);
 				m.setEnabled(false);
 			}
+		}
+	}
+
+	private static final java.util.Set<String> FAILED = new java.util.HashSet<String>();
+
+	/** Runs one part of the client's tick; if it fails it is logged (once) instead of crashing the game. */
+	private static void safely(String what, Runnable r) {
+		try {
+			r.run();
+		} catch (RuntimeException e) {
+			if (FAILED.add(what)) Log.error("Polar " + what + " failed", e);
 		}
 	}
 

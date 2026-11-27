@@ -27,14 +27,14 @@ public final class ViewScreen extends Screen {
 		McGfx g = McGfx.of(pose);
 		view.renderBackground(g, mouseX, mouseY);
 		g.nextLayer();
-		view.render(g, mouseX, mouseY, partialTicks);
+		dev.polarclient.gui.View.renderSafely(view, g, mouseX, mouseY, partialTicks);
 		g.end();
 	}
 
 	/** GLFW buttons (0 left, 1 right, 2 middle) are Polar's numbers already. */
 	@Override
 	public boolean mouseClicked(double x, double y, int button) {
-		return view.mouseClicked(x, y, button);
+		return dev.polarclient.gui.View.clickSafely(view, x, y, button);
 	}
 
 	@Override
@@ -83,7 +83,7 @@ public final class ViewScreen extends Screen {
 
 	@Override
 	public boolean keyPressed(int code, int scanCode, int modifiers) {
-		if (view.keyPressed(key(code, scanCode))) return true;
+		if (dev.polarclient.gui.View.keySafely(view, key(code, scanCode))) return true;
 		if (code == GLFW.GLFW_KEY_ESCAPE && view.closeOnEscape()) {
 			view.onClose();
 			return true;
@@ -99,7 +99,7 @@ public final class ViewScreen extends Screen {
 
 	@Override
 	public void tick() {
-		view.tick();
+		dev.polarclient.gui.View.tickSafely(view);
 	}
 
 	@Override

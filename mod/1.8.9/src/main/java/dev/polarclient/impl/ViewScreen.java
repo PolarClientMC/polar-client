@@ -33,7 +33,7 @@ public final class ViewScreen extends Screen {
 		McGfx g = McGfx.begin();
 		view.renderBackground(g, mouseX, mouseY);
 		g.nextLayer();
-		view.render(g, mouseX, mouseY, partialTicks);
+		dev.polarclient.gui.View.renderSafely(view, g, mouseX, mouseY, partialTicks);
 		g.end();
 	}
 
@@ -42,7 +42,7 @@ public final class ViewScreen extends Screen {
 	protected void mouseClicked(int x, int y, int button) {
 		lastX = x;
 		lastY = y;
-		view.mouseClicked(x, y, button);
+		dev.polarclient.gui.View.clickSafely(view, x, y, button);
 	}
 
 	@Override
@@ -102,13 +102,13 @@ public final class ViewScreen extends Screen {
 		// 1.8.9 sends the key and the character it types together: give text boxes the character first
 		KeyInput k = key(code);
 		if (c >= ' ' && c != 127 && c != '\u00a7' && !k.control && view.charTyped(c)) return;
-		if (view.keyPressed(k)) return;
+		if (dev.polarclient.gui.View.keySafely(view, k)) return;
 		if (code == Keyboard.KEY_ESCAPE && view.closeOnEscape()) view.onClose();
 	}
 
 	@Override
 	public void tick() {
-		view.tick();
+		dev.polarclient.gui.View.tickSafely(view);
 	}
 
 	@Override

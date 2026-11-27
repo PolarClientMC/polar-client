@@ -203,7 +203,13 @@ public final class PolarSocial {
 			dev.polarclient.platform.Platform p = dev.polarclient.platform.Platform.get();
 			if (p != null) p.execute(() -> {
 				if (res == null && error != null) SocialToasts.show(SocialToasts.Kind.INFO, "Polar", plainError(error), null);
-				if (done != null) done.accept(res);
+				if (done == null) return;
+				try {
+					done.accept(res);
+				} catch (RuntimeException e) {
+					// an answer we didn't expect must never take the game down
+					dev.polarclient.Log.error("Polar couldn't use the answer to " + method + " " + path, e);
+				}
 			});
 		});
 	}

@@ -3,7 +3,8 @@ package dev.polarclient.platform;
 /** Polar's own key binds, listed under "Polar Client" in Controls. */
 public enum PolarKey {
 	MENU("menu"), HUD_EDITOR("hud_editor"), ZOOM("zoom"), FREELOOK("freelook"), COPY_COORDS("copy_coordinates"),
-	ADD_WAYPOINT("add_waypoint"), WAYPOINTS("waypoints"), HITBOXES("hitboxes"), JOIN_INVITE("join_invite");
+	ADD_WAYPOINT("add_waypoint"), WAYPOINTS("waypoints"), HITBOXES("hitboxes"), JOIN_INVITE("join_invite"),
+	WORLD_MAP("world_map"), FRIENDS("friends"), PROFILE("profile");
 
 	public final String id;
 

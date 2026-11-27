@@ -64,6 +64,7 @@ public final class WaypointStore {
 						Waypoint w = new Waypoint(o.get("name").getAsString(), o.get("x").getAsInt(), o.get("y").getAsInt(), o.get("z").getAsInt(),
 							o.has("dim") ? o.get("dim").getAsString() : "minecraft:overworld", o.has("color") ? o.get("color").getAsInt() : 0xFF8CC8FF);
 						if (o.has("visible")) w.visible = o.get("visible").getAsBoolean();
+						if (o.has("icon")) w.icon = o.get("icon").getAsString();
 						list.add(w);
 					} catch (RuntimeException bad) {
 						// skip a broken entry
@@ -91,6 +92,7 @@ public final class WaypointStore {
 				o.addProperty("dim", w.dim);
 				o.addProperty("color", w.color);
 				o.addProperty("visible", w.visible);
+				o.addProperty("icon", w.icon);
 				arr.add(o);
 			}
 			root.add(world.getKey(), arr);

@@ -8,6 +8,10 @@ public final class Waypoint {
 	public String dim;
 	public int color;
 	public boolean visible = true;
+	/** One of {@link #ICONS}. */
+	public String icon = "flag";
+
+	public static final String[] ICONS = {"flag", "home", "star", "mine", "portal", "heart", "chest", "gem", "tree", "village", "skull"};
 
 	public Waypoint(String name, int x, int y, int z, String dim, int color) {
 		this.name = name;

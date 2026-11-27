@@ -29,6 +29,7 @@ import dev.polarclient.modules.visual.TimeWeatherModule;
 import dev.polarclient.modules.world.CopyCoordsModule;
 import dev.polarclient.modules.world.MinimapModule;
 import dev.polarclient.modules.world.WaypointsModule;
+import dev.polarclient.modules.world.WorldMapModule;
 import dev.polarclient.modules.AutoGGModule;
 import dev.polarclient.modules.CustomFontModule;
 import dev.polarclient.modules.EntityShadowsModule;
@@ -139,6 +140,7 @@ public final class ModuleManager {
 	public final TabListModule tabList;
 	// world
 	public final WaypointsModule waypoints;
+	public final WorldMapModule worldMap;
 	public final CopyCoordsModule copyCoords;
 	public final MinimapModule minimap;
 
@@ -208,6 +210,7 @@ public final class ModuleManager {
 		add(new WorldBorderModule());
 		add(new DistanceModule());
 		waypoints = add(new WaypointsModule());
+		worldMap = add(new WorldMapModule());
 		copyCoords = add(new CopyCoordsModule());
 		minimap = add(new MinimapModule());
 		// social

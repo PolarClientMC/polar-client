@@ -18,7 +18,7 @@ public class WaypointsView extends View {
 	private static final float DW = 400, DH = 256, R = 12, ROW = 28, LIST_Y = 72;
 	/** Waypoint colours (new waypoints take the next one). */
 	public static final int[] COLORS = {0xFF8CC8FF, 0xFF5CF2D6, 0xFF6EE7A0, 0xFFFFE066, 0xFFFFA94D, 0xFFFF6B6B, 0xFFB197FC};
-	private static final float FIELD_W = 114, SWATCH_X = 140, SWATCH_STEP = 14, ADD_W = 78, SAVE_W = 54, MOVE_W = 76;
+	private static final float FIELD_W = 114, SWATCH_X = 140, SWATCH_STEP = 13, ADD_W = 78, SAVE_W = 54, MOVE_W = 76;
 
 	private final TextField name = new TextField(32);
 	private float zoom = 1, ox, oy;
@@ -27,6 +27,8 @@ public class WaypointsView extends View {
 	private Waypoint confirmDelete;
 	private long confirmAt;
 	private int color = COLORS[0];
+	private String icon = "flag";
+	private static final float ICON_X = 236;
 
 	public WaypointsView(Object parent) {
 		super(parent);
@@ -109,6 +111,10 @@ public class WaypointsView extends View {
 				Ui.circle(g, sx + 6, ey + 10, 6, c);
 				sx += SWATCH_STEP;
 			}
+			// the icon: click to go through them
+			boolean iconHover = Ui.inside(mx, my, ICON_X - 7, ey + 3, 14, 14);
+			Ui.circle(g, ICON_X, ey + 10, 6.5f, iconHover ? 0xFF2A4A72 : 0xFF143259);
+			Ui.icon(g, WaypointIcons.glyph(icon), ICON_X, ey + 10, color, Fonts.ICON_S);
 			if (selected == null) {
 				button(g, "Add here", Icon.ADD, DW - 16 - ADD_W, ey, ADD_W, mx, my, accent, true);
 			} else {
@@ -155,7 +161,8 @@ public class WaypointsView extends View {
 		if (sel) Ui.ring(g, x, y, rw, ROW, 7, accent, 1);
 		boolean here = dim != null && dim.equals(w.dim);
 		int text = w.visible ? 0xFFF1F6FC : 0xFF6F819A;
-		Ui.circle(g, x + 14, y + ROW / 2f, 5, w.visible ? w.color : Theme.alpha(w.color, 0.4f));
+		Ui.circle(g, x + 14, y + ROW / 2f, 6, w.visible ? w.color : Theme.alpha(w.color, 0.4f));
+		Ui.icon(g, WaypointIcons.glyph(w.icon), x + 14, y + ROW / 2f, 0xFF0B1426, Fonts.ICON_S);
 		Ui.text(g, Fonts.ellipsize(w.name, Fonts.BOLD, 150), x + 26, y + 5, text, Fonts.BOLD);
 		String info = w.x + ", " + w.y + ", " + w.z + "  ·  " + dimName(w.dim)
 			+ (here && p().hasPlayer() ? "  ·  " + WaypointsModule.formatDistance(w.distanceTo(p().playerX(), p().playerY(), p().playerZ())) : "");
@@ -192,6 +199,7 @@ public class WaypointsView extends View {
 		if (w != null) {
 			name.setValue(w.name);
 			color = w.color;
+			icon = w.icon;
 		} else {
 			name.setValue("");
 		}
@@ -204,6 +212,7 @@ public class WaypointsView extends View {
 		if (selected != null) {
 			if (!n.isEmpty()) selected.name = n;
 			selected.color = color;
+			selected.icon = icon;
 			WaypointStore.save();
 			select(null);
 			return;
@@ -216,6 +225,7 @@ public class WaypointsView extends View {
 			Waypoint w = list().get(list().size() - 1);
 			if (!n.isEmpty()) w.name = n;
 			w.color = color;
+			w.icon = icon;
 			WaypointStore.save();
 			name.setValue("");
 			scrollTarget = maxScroll();
@@ -239,6 +249,12 @@ public class WaypointsView extends View {
 				return true;
 			}
 			sx += SWATCH_STEP;
+		}
+		if (Ui.inside(mx, my, ICON_X - 7, ey + 3, 14, 14)) {
+			int i = java.util.Arrays.asList(Waypoint.ICONS).indexOf(icon);
+			icon = Waypoint.ICONS[(i + 1) % Waypoint.ICONS.length];
+			p().playClickSound();
+			return true;
 		}
 		if (selected == null && Ui.inside(mx, my, DW - 16 - ADD_W, ey, ADD_W, 20)) {
 			p().playClickSound();

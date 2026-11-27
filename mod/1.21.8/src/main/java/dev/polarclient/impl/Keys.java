@@ -27,6 +27,9 @@ public final class Keys {
 		add(PolarKey.WAYPOINTS, InputConstants.UNKNOWN.getValue());
 		add(PolarKey.HITBOXES, InputConstants.KEY_H);
 		add(PolarKey.JOIN_INVITE, InputConstants.KEY_Y);
+		add(PolarKey.WORLD_MAP, InputConstants.KEY_M);
+		add(PolarKey.FRIENDS, InputConstants.KEY_O);
+		add(PolarKey.PROFILE, InputConstants.KEY_P);
 	}
 
 	private static void add(PolarKey key, int defaultKey) {

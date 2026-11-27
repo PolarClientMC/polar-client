@@ -71,6 +71,7 @@ public final class Icons {
 		MODULES.put("coins_counter", Icon.TOKEN);
 		MODULES.put("arrow_counter", Icon.TARGET);
 		MODULES.put("light_level", Icon.SUN);
+		MODULES.put("world_map", Icon.MAP);
 		MODULES.put("server_tps", Icon.SPEED);
 		MODULES.put("now_playing", Icon.VOLUME);
 		MODULES.put("memory", Icon.MEMORY);

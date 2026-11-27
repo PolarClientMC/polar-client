@@ -25,6 +25,9 @@ public final class Keys {
 		add(PolarKey.WAYPOINTS, Keyboard.KEY_NONE);
 		add(PolarKey.HITBOXES, Keyboard.KEY_H);
 		add(PolarKey.JOIN_INVITE, Keyboard.KEY_Y);
+		add(PolarKey.WORLD_MAP, Keyboard.KEY_M);
+		add(PolarKey.FRIENDS, Keyboard.KEY_O);
+		add(PolarKey.PROFILE, Keyboard.KEY_P);
 	}
 
 	private Keys() {

@@ -49,6 +49,7 @@ public final class Polar {
 		dev.polarclient.world.SessionStats.tick(p);
 		dev.polarclient.world.LastServer.tick(p);
 		dev.polarclient.hooks.BoxSorter.tick(p);
+		if (modules.worldMap.isEnabled()) dev.polarclient.world.WorldMapStore.tick(p);
 		dev.polarclient.social.PolarSocial.tick();
 		for (Module m : modules.all()) {
 			try {

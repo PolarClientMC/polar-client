@@ -2,7 +2,11 @@ package dev.polarclient.modules.world;
 
 import dev.polarclient.Polar;
 import dev.polarclient.gfx.Gfx;
+import dev.polarclient.gfx.UiFont;
+import dev.polarclient.gui.WaypointIcons;
 import dev.polarclient.gui.WaypointsView;
+import dev.polarclient.gui.ui.Icon;
+import dev.polarclient.gui.ui.Ui;
 import dev.polarclient.module.Category;
 import dev.polarclient.module.Module;
 import dev.polarclient.platform.PolarKey;
@@ -30,6 +34,10 @@ public class WaypointsModule extends Module {
 	public final BooleanSetting distance = add(new BooleanSetting("distance", "Distance", true));
 	public final NumberSetting maxDistance = add(new NumberSetting("max_distance", "Hide beyond (0 = never)", 0, 0, 10000, 100, " m"));
 	public final BooleanSetting showDeath = add(new BooleanSetting("show_death", "Show last death", true));
+	public final BooleanSetting edgeArrows = add(new BooleanSetting("edge_arrows", "Arrows at the screen edge for waypoints out of view", true));
+	public final BooleanSetting deathArrow = add(new BooleanSetting("death_arrow", "Arrow back to where you died", true));
+	public final BooleanSetting removeAfterVisit = add(new BooleanSetting("remove_after_visit", "Remove the death waypoint once you've been back", true));
+	public final BooleanSetting hideWhenDespawned = add(new BooleanSetting("hide_when_despawned", "Hide the arrow when the items have despawned", true));
 
 	public WaypointsModule() {
 		super("waypoints", "Waypoints", "Mark spots in the world with beams you can see from far away. Press B to add one.", Category.WORLD, true);
@@ -70,6 +78,7 @@ public class WaypointsModule extends Module {
 		final String name;
 		final double x, y, z, dist;
 		final int color;
+		String glyph = Icon.BOOKMARK;
 
 		Marker(String name, double x, double y, double z, int color, double dist) {
 			this.name = name;
@@ -89,23 +98,95 @@ public class WaypointsModule extends Module {
 		List<Marker> markers = new ArrayList<Marker>();
 		for (Waypoint w : WaypointStore.of(world)) {
 			if (!w.visible || dim == null || !dim.equals(w.dim)) continue;
-			markers.add(new Marker(w.name, w.x + 0.5, w.y, w.z + 0.5, w.color, w.distanceTo(px, py, pz)));
+			Marker mk = new Marker(w.name, w.x + 0.5, w.y, w.z + 0.5, w.color, w.distanceTo(px, py, pz));
+			mk.glyph = WaypointIcons.glyph(w.icon);
+			markers.add(mk);
 		}
 		if (showDeath.on()) {
 			DeathWaypointModule death = (DeathWaypointModule) Polar.modules().byId("death_waypoint");
 			double[] d = death == null ? null : death.lastDeath();
 			if (d != null && dim != null && dim.equals(death.lastDeathDimension())) {
 				double dist = Math.sqrt((d[0] - px) * (d[0] - px) + (d[1] - py) * (d[1] - py) + (d[2] - pz) * (d[2] - pz));
-				markers.add(new Marker("Last death", Math.floor(d[0]) + 0.5, Math.floor(d[1]), Math.floor(d[2]) + 0.5, 0xFFFF6B6B, dist));
+				Marker mk = new Marker("Last death", Math.floor(d[0]) + 0.5, Math.floor(d[1]), Math.floor(d[2]) + 0.5, 0xFFFF6B6B, dist);
+				mk.glyph = Icon.SKULL;
+				markers.add(mk);
 			}
 		}
 		double max = maxDistance.get();
 		Collections.sort(markers, (a, b) -> Double.compare(b.dist, a.dist));
+		List<float[]> placed = new ArrayList<float[]>();
 		for (Marker m : markers) {
 			if (max > 0 && m.dist > max) continue;
 			if (beams.on()) drawBeam(g, m);
-			drawLabel(g, m);
+			if (!drawLabel(g, m) && edgeArrows.on()) edgeArrow(g, m, placed);
 		}
+		if (deathArrow.on()) deathCard(g);
+	}
+
+	/** Degrees from where you're facing to (x, z): 0 ahead, 90 to the right. */
+	private float bearing(double x, double z) {
+		double a = Math.toDegrees(Math.atan2(z - p().playerZ(), x - p().playerX())) - (p().playerYaw() + 90);
+		a = ((a % 360) + 540) % 360 - 180;
+		return (float) a;
+	}
+
+	/** A waypoint out of view: a dot in its colour on the screen's edge, on the side it lies, with an arrow. */
+	private void edgeArrow(Gfx g, Marker m, List<float[]> placed) {
+		float rel = bearing(m.x, m.z);
+		double r = Math.toRadians(rel);
+		float dx = (float) Math.sin(r), dy = (float) -Math.cos(r);
+		float cx = g.width() / 2f, cy = g.height() / 2f, inset = 16;
+		float k = Math.min(Math.abs(dx) > 1e-4 ? (cx - inset) / Math.abs(dx) : 1e9f, Math.abs(dy) > 1e-4 ? (cy - inset) / Math.abs(dy) : 1e9f);
+		float x = cx + dx * k, y = cy + dy * k;
+		// stack arrows that would sit on each other, along the edge
+		boolean side = Math.abs(dx * k) >= cx - inset - 0.5f;
+		for (int tries = 0; tries < 12; tries++) {
+			boolean clash = false;
+			for (float[] q : placed) if (Math.abs(q[0] - x) < 13 && Math.abs(q[1] - y) < 13) clash = true;
+			if (!clash) break;
+			if (side) y += 14;
+			else x += 14;
+		}
+		placed.add(new float[] {x, y});
+		Ui.circle(g, x, y, 6.5f, 0xC00B1426);
+		Ui.circle(g, x, y, 5.5f, m.color);
+		Ui.icon(g, m.glyph, x, y, 0xFF0B1426, UiFont.ICON_S);
+		g.push();
+		g.translate(x + dx * 10, y + dy * 10);
+		g.rotate(rel);
+		Ui.icon(g, Icon.NAVIGATION, 0, 0, m.color, UiFont.ICON_S);
+		g.pop();
+	}
+
+	/** After dying: a card at the top with an arrow back to the spot, how far it is and how long the items last. */
+	private void deathCard(Gfx g) {
+		DeathWaypointModule death = (DeathWaypointModule) Polar.modules().byId("death_waypoint");
+		if (death == null || !death.isEnabled() || !p().hasPlayer() || p().health() <= 0 || p().screenOpen()) return;
+		double[] d = death.lastDeath();
+		String dim = p().dimension();
+		if (d == null || dim == null || !dim.equals(death.lastDeathDimension()) || !death.leftSpot()) return;
+		int left = death.despawnSeconds();
+		if (left == 0 && hideWhenDespawned.on()) return;
+		double dist = Math.sqrt(Math.pow(d[0] - p().playerX(), 2) + Math.pow(d[2] - p().playerZ(), 2));
+		String main, sub;
+		if (dist <= 4) {
+			main = "You're there";
+			sub = left > 0 ? "Your items are around you" : "Your items have despawned";
+		} else {
+			main = "Back to where you died  " + formatDistance(dist);
+			sub = left > 0 ? String.format(Locale.ROOT, "Items despawn in %d:%02d", left / 60, left % 60) : "Your items have despawned";
+		}
+		int w = Math.max(Draw.width(main), Draw.width(sub)) + 34, h = 24, x = g.width() / 2 - w / 2, y = 4;
+		Draw.round(g, x, y, w, h, 5, 0xC80B1426);
+		g.fill(x + 3, y + h - 1, x + w - 3, y + h, 0xFFFF6B6B);
+		float ax = x + 13, ay = y + h / 2f;
+		g.push();
+		g.translate(ax, ay);
+		if (dist > 4) g.rotate(bearing(d[0], d[2]));
+		Ui.icon(g, dist > 4 ? Icon.NAVIGATION : Icon.CHECK, 0, 0, 0xFFFF8A8A, UiFont.ICON_M);
+		g.pop();
+		g.text(main, x + 25, y + 3, 0xFFFFFFFF, true);
+		g.text(sub, x + 25, y + 13, 0xFFFFC8C8, true);
 	}
 
 	private void drawBeam(Gfx g, Marker m) {
@@ -127,20 +208,23 @@ public class WaypointsModule extends Module {
 		}
 	}
 
-	private void drawLabel(Gfx g, Marker m) {
+	/** False when the waypoint is out of view (nothing drawn). */
+	private boolean drawLabel(Gfx g, Marker m) {
 		float[] s = p().project(m.x, m.y + 1.0, m.z);
-		if (s == null || s[0] < -50 || s[0] > g.width() + 50 || s[1] < -20 || s[1] > g.height() + 20) return;
+		if (s == null || s[0] < 0 || s[0] > g.width() || s[1] < -20 || s[1] > g.height() + 20) return false;
 		int x = Math.round(s[0]), y = Math.round(s[1]);
-		// diamond marker
-		for (int r = 0; r < 4; r++) g.fill(x - r, y - 4 + r, x + r + 1, y - 3 + r, m.color);
-		for (int r = 0; r < 4; r++) g.fill(x - 3 + r, y + r, x + 4 - r, y + r + 1, m.color);
+		// the waypoint's icon in its colour
+		Ui.circle(g, x, y, 5.5f, 0xC00B1426);
+		Ui.circle(g, x, y, 4.5f, m.color);
+		Ui.icon(g, m.glyph, x, y, 0xFF0B1426, UiFont.ICON_S);
 		String text = (labels.on() ? m.name : "") + (distance.on() ? (labels.on() ? "  " : "") + formatDistance(m.dist) : "");
-		if (text.isEmpty()) return;
+		if (text.isEmpty()) return true;
 		int tw = Draw.width(text);
 		int bx = x - tw / 2 - 4, by = y - 18;
 		Draw.round(g, bx, by, tw + 8, 12, 3, 0xB00B1426);
 		g.fill(bx + 2, by + 11, bx + tw + 6, by + 12, m.color);
 		g.text(text, bx + 4, by + 2, 0xFFFFFFFF, true);
+		return true;
 	}
 
 	public static String formatDistance(double d) {

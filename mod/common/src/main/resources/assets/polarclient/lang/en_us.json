@@ -8,5 +8,8 @@
 	"key.polarclient.add_waypoint": "Add Waypoint Here",
 	"key.polarclient.waypoints": "Waypoints",
 	"key.polarclient.hitboxes": "Toggle Hitboxes",
-	"key.polarclient.join_invite": "Join Friend's Invite"
+	"key.polarclient.join_invite": "Join Friend's Invite",
+	"key.polarclient.world_map": "World Map",
+	"key.polarclient.friends": "Friends",
+	"key.polarclient.profile": "Your Profile"
 }

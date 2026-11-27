@@ -907,12 +907,38 @@ public final class McPlatform extends Platform {
 
 	@Override
 	public boolean canOpenToLan() {
-		return mc().getSingleplayerServer() != null && !mc().getSingleplayerServer().isPublished();
+		return lanScreen() != null && mc().getSingleplayerServer() != null && !mc().getSingleplayerServer().isPublished();
+	}
+
+	/** The game's "Open to LAN" screen. Its class moved in 26.x, and 26.x runs with real class names, so it's looked up. */
+	private static java.lang.reflect.Constructor<?> lanScreen;
+	private static boolean lanLooked;
+
+	private static java.lang.reflect.Constructor<?> lanScreen() {
+		if (lanLooked) return lanScreen;
+		lanLooked = true;
+		String[] names = {"net.minecraft.client.gui.screens.ShareToLanScreen", "net.minecraft.client.gui.screens.multiplayer.ShareToLanScreen",
+				"net.minecraft.client.gui.screens.worldselection.ShareToLanScreen", "net.minecraft.client.gui.screens.options.ShareToLanScreen"};
+		for (String n : names) {
+			try {
+				lanScreen = Class.forName(n).getConstructor(Screen.class);
+				return lanScreen;
+			} catch (ReflectiveOperationException | LinkageError ignored) {
+				// try the next name
+			}
+		}
+		return null;
 	}
 
 	@Override
 	public void openToLan(Object parent) {
-		mc().gui.setScreen(new net.minecraft.client.gui.screens.ShareToLanScreen((Screen) parent));
+		java.lang.reflect.Constructor<?> c = lanScreen();
+		if (c == null) return;
+		try {
+			mc().gui.setScreen((Screen) c.newInstance((Screen) parent));
+		} catch (ReflectiveOperationException e) {
+			dev.polarclient.Log.error("Couldn't open the LAN screen", e);
+		}
 	}
 
 	@Override
@@ -988,7 +1014,7 @@ public final class McPlatform extends Platform {
 		if (player() == null || mc().gameMode == null) return false;
 		net.minecraft.world.inventory.AbstractContainerMenu m = player().containerMenu;
 		if (m == null || slot < 0 || slot >= m.slots.size()) return false;
-		mc().gameMode.handleInventoryMouseClick(m.containerId, slot, button, net.minecraft.world.inventory.ClickType.PICKUP, player());
+		mc().gameMode.handleInventoryMouseClick(m.containerId, slot, button, net.minecraft.world.inventory.ContainerInput.PICKUP, player());
 		return true;
 	}
 

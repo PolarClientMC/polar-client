@@ -39,7 +39,7 @@ public abstract class ScreenSkinInitMixin extends Screen {
 		}
 		for (ScreenSkins.Extra e : ScreenSkins.extras(this, width, height, own)) {
 			final String id = e.id;
-			Button b = Button.builder(Component.literal(e.label), b -> ScreenSkins.press(id)).bounds(e.x, e.y, e.w, e.h).build();
+			Button b = Button.builder(Component.literal(e.label), btn -> ScreenSkins.press(id)).bounds(e.x, e.y, e.w, e.h).build();
 			polar$extras.add(addRenderableWidget(b));
 		}
 	}

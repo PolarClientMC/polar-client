@@ -1,15 +1,6 @@
 {
   "items": [
     {
-      "id": "release-1.0.22",
-      "date": "2026-11-27",
-      "tag": "Update",
-      "title": "Polar Client 1.0.22",
-      "body": "Christmas main menu, a new pause menu and mods menu, and a HUD editor with snapping, groups and undo. New HUD mods: Session Overview, Friends Online, Coins, Arrows, Item Cooldowns, Light Level, Server TPS and Now Playing. Polar death and disconnect screens, and a sort button with Undo on chests. A world map (M) with waypoint icons and a way back to where you died. Friends, messages and parties in game (O), and profile cards (P). An in-game wardrobe with a coin shop and an outfit wheel (hold G). VexCraft is now a partner server.",
-      "link": "https://github.com/PolarClientMC/polar-client/releases/tag/v1.0.22",
-      "linkLabel": "Release notes"
-    },
-    {
       "id": "release-1.0.20",
       "date": "2026-11-22",
       "tag": "Update",

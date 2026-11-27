@@ -14,6 +14,9 @@ import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -26,14 +29,14 @@ public final class WorldMapStore {
 	private WorldMapStore() {
 	}
 
-	/** One chunk: 16 x 16 shaded colours (0 = nothing) and heights. */
+	/** One chunk: 16 x 16 shaded colours (0 = nothing) and heights. Never changed once stored (a re-read makes a new one). */
 	public static final class Tile {
 		public final int[] argb = new int[256];
 		public final short[] height = new short[256];
 		long readAt;
 	}
 
-	private static final int READS_PER_TICK = 6, REFRESHES_PER_TICK = 2, RADIUS = 8, MAX_TILES = 24000;
+	private static final int READS_PER_TICK = 4, REFRESHES_PER_TICK = 1, RADIUS = 8, MAX_TILES = 24000;
 	private static final long REFRESH_MS = 15_000, SAVE_MS = 120_000;
 
 	private static final Map<String, Map<Long, Tile>> MAPS = new HashMap<String, Map<Long, Tile>>();
@@ -41,7 +44,7 @@ public final class WorldMapStore {
 	private static String world;
 	private static long savedAt = System.currentTimeMillis();
 	private static int[] rgb = new int[256], height = new int[256], water = new int[256];
-	private static int revision;
+	private static volatile int revision;
 
 	public static long key(int cx, int cz) {
 		return ((long) cx << 32) ^ (cz & 0xFFFFFFFFL);
@@ -57,11 +60,26 @@ public final class WorldMapStore {
 		String k = worldId + "|" + dimension;
 		Map<Long, Tile> m = MAPS.get(k);
 		if (m == null) {
-			m = load(worldId, dimension);
+			final Map<Long, Tile> fresh = new ConcurrentHashMap<Long, Tile>();
+			m = fresh;
 			MAPS.put(k, m);
+			// read the saved map off the game thread; what's been seen since joining wins
+			DISK.execute(() -> {
+				Map<Long, Tile> saved = load(worldId, dimension);
+				for (Map.Entry<Long, Tile> e : saved.entrySet()) fresh.putIfAbsent(e.getKey(), e.getValue());
+				revision++;
+			});
 		}
 		return m;
 	}
+
+	/** Reading and writing map files happens here, never on the game thread (a big map took a moment to save). */
+	private static final ExecutorService DISK = Executors.newSingleThreadExecutor(r -> {
+		Thread t = new Thread(r, "Polar world map");
+		t.setDaemon(true);
+		t.setPriority(Thread.MIN_PRIORITY);
+		return t;
+	});
 
 	/** Whether anything was ever recorded there. */
 	public static boolean explored(String worldId, String dimension) {
@@ -99,15 +117,12 @@ public final class WorldMapStore {
 					boolean missing = t == null;
 					if (missing ? reads >= READS_PER_TICK : now - t.readAt < REFRESH_MS || refreshes >= REFRESHES_PER_TICK) continue;
 					if (!p.mapChunk(cx, cz, scanY, rgb, height, water)) continue;
-					Tile fresh = t != null ? t : new Tile();
+					Tile fresh = new Tile();
 					shade(fresh);
 					fresh.readAt = now;
-					if (missing) {
-						tiles.put(k, fresh);
-						reads++;
-					} else {
-						refreshes++;
-					}
+					tiles.put(k, fresh);
+					if (missing) reads++;
+					else refreshes++;
 					changed = true;
 				}
 			}
@@ -172,7 +187,7 @@ public final class WorldMapStore {
 		Map<Long, Tile> m = new HashMap<Long, Tile>();
 		Path f = file(worldId, dimension);
 		if (!Files.exists(f)) return m;
-		try (InputStream raw = Files.newInputStream(f); DataInputStream in = new DataInputStream(new GZIPInputStream(raw))) {
+		try (InputStream raw = Files.newInputStream(f); DataInputStream in = new DataInputStream(new java.io.BufferedInputStream(new GZIPInputStream(raw, 1 << 16)))) {
 			if (in.readInt() != 1) return m;
 			int n = in.readInt();
 			for (int i = 0; i < n && i < MAX_TILES; i++) {
@@ -191,28 +206,35 @@ public final class WorldMapStore {
 	public static void saveAll() {
 		savedAt = System.currentTimeMillis();
 		for (Iterator<Map.Entry<String, Boolean>> it = DIRTY.entrySet().iterator(); it.hasNext(); ) {
-			String k = it.next().getKey();
+			final String k = it.next().getKey();
 			it.remove();
-			Map<Long, Tile> tiles = MAPS.get(k);
+			final Map<Long, Tile> tiles = MAPS.get(k);
 			int bar = k.lastIndexOf('|');
 			if (tiles == null || bar < 0) continue;
-			Path f = file(k.substring(0, bar), k.substring(bar + 1));
-			try {
-				Files.createDirectories(f.getParent());
-				Path tmp = f.resolveSibling(f.getFileName() + ".tmp");
-				try (OutputStream raw = Files.newOutputStream(tmp); DataOutputStream out = new DataOutputStream(new GZIPOutputStream(raw))) {
-					out.writeInt(1);
-					out.writeInt(tiles.size());
-					for (Map.Entry<Long, Tile> e : tiles.entrySet()) {
-						out.writeLong(e.getKey());
-						for (int c : e.getValue().argb) out.writeInt(c);
-						for (short h : e.getValue().height) out.writeShort(h);
-					}
-				}
-				Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING);
-			} catch (Exception e) {
-				Log.error("Couldn't save the world map", e);
-			}
+			final Path f = file(k.substring(0, bar), k.substring(bar + 1));
+			DISK.execute(() -> write(f, tiles));
 		}
 	}
+
+	private static void write(Path f, Map<Long, Tile> tiles) {
+		try {
+			Files.createDirectories(f.getParent());
+			Path tmp = f.resolveSibling(f.getFileName() + ".tmp");
+			// tiles never change once stored, so this can read them while the game keeps adding new ones
+			java.util.List<Map.Entry<Long, Tile>> list = new java.util.ArrayList<Map.Entry<Long, Tile>>(tiles.entrySet());
+			try (OutputStream raw = Files.newOutputStream(tmp); DataOutputStream out = new DataOutputStream(new java.io.BufferedOutputStream(new GZIPOutputStream(raw, 1 << 16)))) {
+				out.writeInt(1);
+				out.writeInt(list.size());
+				for (Map.Entry<Long, Tile> e : list) {
+					out.writeLong(e.getKey());
+					for (int c : e.getValue().argb) out.writeInt(c);
+					for (short h : e.getValue().height) out.writeShort(h);
+				}
+			}
+			Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING);
+		} catch (Exception e) {
+			Log.error("Couldn't save the world map", e);
+		}
+	}
+
 }

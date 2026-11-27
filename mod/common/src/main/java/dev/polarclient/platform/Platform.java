@@ -428,6 +428,26 @@ public abstract class Platform {
 		return null;
 	}
 
+		// ------------------------------------------------------------------ death and disconnect screens
+
+	/**
+	 * Which of the vanilla screens Polar restyles this is: "death", "connect" or "disconnected", or null for any other
+	 * screen (and on versions that keep them all vanilla).
+	 */
+	public String skinKind(Object screen) {
+		return null;
+	}
+
+	/** A vanilla screen's title as plain text, or null. */
+	public String screenTitle(Object screen) {
+		return null;
+	}
+
+	/** Clicks a slot of the open container (pickup, button 0 = left), as the player would. False when nothing is open. */
+	public boolean clickSlot(int slot, int button) {
+		return false;
+	}
+
 		/** Whether this version swaps the vanilla pause screen for Polar's. */
 	public boolean hasPolarPauseMenu() {
 		return false;

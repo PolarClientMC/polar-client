@@ -32,6 +32,8 @@
 		"PlayerTabOverlayAccessor",
 		"PlayerTabOverlayMixin",
 		"ScreenEffectRendererMixin",
+		"ScreenSkinInitMixin",
+		"ScreenSkinMixin",
 		"ShaderManagerMixin",
 		"SoundManagerMixin",
 		"WaterFogEnvironmentMixin"

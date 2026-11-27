@@ -35,6 +35,8 @@
 		"PlayerTabOverlayMixin",
 		"PostChainAccessor",
 		"ScreenEffectRendererMixin",
+		"ScreenSkinInitMixin",
+		"ScreenSkinMixin",
 		"ScreenSwapMixin",
 		"SoundManagerMixin"
 	],

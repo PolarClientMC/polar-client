@@ -942,6 +942,19 @@ public final class McPlatform extends Platform {
 	// ------------------------------------------------------------------ HUD data
 
 	@Override
+	public String skinKind(Object s) {
+		if (s instanceof net.minecraft.client.gui.screens.DeathScreen) return "death";
+		if (s instanceof net.minecraft.client.gui.screens.ConnectScreen) return "connect";
+		if (s instanceof net.minecraft.client.gui.screens.DisconnectedScreen) return "disconnected";
+		return null;
+	}
+
+	@Override
+	public String screenTitle(Object s) {
+		return s instanceof net.minecraft.client.gui.screens.Screen ? ((net.minecraft.client.gui.screens.Screen) s).getTitle().getString() : null;
+	}
+
+	@Override
 	public String plain(Object component) {
 		return component instanceof net.minecraft.network.chat.Component ? ((net.minecraft.network.chat.Component) component).getString() : null;
 	}

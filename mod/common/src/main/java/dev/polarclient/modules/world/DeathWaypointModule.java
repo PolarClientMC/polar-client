@@ -38,6 +38,20 @@ public class DeathWaypointModule extends TextHudModule {
 		return has ? new double[] {dx, dy, dz} : null;
 	}
 
+	/** Forgets the last death (the death screen's Remove). */
+	public void clear() {
+		has = false;
+	}
+
+	/** Puts the death waypoint back (the death screen's Set waypoint). */
+	public void set(double x, double y, double z, String dimension) {
+		dx = x;
+		dy = y;
+		dz = z;
+		dim = dimension;
+		has = true;
+	}
+
 	public String lastDeathDimension() {
 		return dim;
 	}

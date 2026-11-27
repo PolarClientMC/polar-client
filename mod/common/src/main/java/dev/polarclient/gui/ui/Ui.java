@@ -90,6 +90,14 @@ public final class Ui {
 
 		g.push();
 		g.scale(1f / s);
+		rectPx(g, x0, y0, x1, y1, a, b, c, d, color);
+		g.pop();
+	}
+
+	/** A rounded rect in screen pixels (call inside a 1/scale pose), corner radii already clamped. */
+	private static void rectPx(Gfx g, int x0, int y0, int x1, int y1, int a, int b, int c, int d, int color) {
+		if (x1 <= x0 || y1 <= y0 || (color >>> 24) == 0) return;
+		int left = Math.max(a, d), right = Math.max(b, c);
 		// centre column
 		g.fill(x0 + left, y0, x1 - right, y1, color);
 		// left column (between the two left corners) + the bits beside the smaller corner
@@ -107,7 +115,6 @@ public final class Ui {
 		corner(g, x1 - b, y0, b, true, false, color);
 		corner(g, x1 - c, y1 - c, c, true, true, color);
 		corner(g, x0, y1 - d, d, false, true, color);
-		g.pop();
 	}
 
 	private static int clamp(int r, int max) {
@@ -187,22 +194,114 @@ public final class Ui {
 		if (cr > 0.02f) g.fill(ir, row, ir + 1, row + 1, Theme.alpha(color, cr));
 	}
 
-	/** Rounded rect with a vertical gradient (top colour to bottom colour), anti-aliased sides. */
+	private static final String VRAMP = "textures/gui/shape/vramp.png", HRAMP = "textures/gui/shape/hramp.png";
+	private static final String RING = "textures/gui/shape/ring_corners.png";
+	/** Where each ring corner (radius 1..32 screen px) sits in ring_corners.png (256 x 256), for 1 and 2 px strokes. */
+	private static final int[][] RING_X = {
+			{70, 66, 60, 52, 42, 30, 16, 0, 234, 214, 192, 168, 142, 114, 84, 52, 18, 234, 196, 156, 114, 70, 24, 212, 162, 110, 56, 0, 186, 126, 64, 0},
+			{71, 68, 63, 56, 47, 36, 23, 8, 243, 224, 203, 180, 155, 128, 99, 68, 35, 0, 215, 176, 135, 92, 47, 0, 187, 136, 83, 28, 215, 156, 95, 32}};
+	private static final int[][] RING_Y = {
+			{102, 102, 102, 102, 102, 102, 102, 102, 84, 84, 84, 84, 84, 84, 84, 84, 84, 60, 60, 60, 60, 60, 60, 32, 32, 32, 32, 32, 0, 0, 0, 0},
+			{102, 102, 102, 102, 102, 102, 102, 102, 84, 84, 84, 84, 84, 84, 84, 84, 84, 84, 60, 60, 60, 60, 60, 60, 32, 32, 32, 32, 0, 0, 0, 0}};
+
+	/*
+	 * Gradients and rings are drawn with a few textured quads (ramps and pre-rendered corners) rather than one fill per
+	 * pixel row: a screen full of cards used to be thousands of fills a frame, which made every Polar screen lag.
+	 */
+
+	/** Rounded rect with a vertical gradient (top colour to bottom colour). */
 	public static void gradientRect(Gfx g, float x, float y, float w, float h, float r, int top, int bottom) {
+		if (w <= 0 || h <= 0) return;
 		int s = scale();
-		float x0 = x * s, y0 = y * s, ws = w * s, hs = h * s, rs = Math.min(r * s, Math.min(ws, hs) / 2);
+		int x0 = Math.round(x * s), y0 = Math.round(y * s), x1 = Math.round((x + w) * s), y1 = Math.round((y + h) * s);
+		int hs = y1 - y0;
+		if (x1 <= x0 || hs <= 0) return;
+		int R = clamp(Math.round(r * s), Math.min(x1 - x0, hs) / 2);
 		g.push();
 		g.scale(1f / s);
-		for (int row = (int) Math.floor(y0); row < Math.ceil(y0 + hs); row++) {
-			float[] sp = span(x0, y0, ws, hs, rs, row + 0.5f);
-			if (sp == null) continue;
-			aaSpan(g, sp[0], sp[1], row, Theme.lerp(top, bottom, (row + 0.5f - y0) / hs));
+		// the middle columns are a true gradient top to bottom; the sides, between the corners, too; only the four
+		// corner squares take one colour each (the colour of their middle row)
+		vRamp(g, x0 + R, y0, x1 - R, y1, top, bottom);
+		if (R > 0) {
+			int a = Theme.lerp(top, bottom, (float) R / hs), b = Theme.lerp(top, bottom, 1 - (float) R / hs);
+			vRamp(g, x0, y0 + R, x0 + R, y1 - R, a, b);
+			vRamp(g, x1 - R, y0 + R, x1, y1 - R, a, b);
+			gradientCorner(g, x0, y0, R, false, false, y0, hs, top, bottom);
+			gradientCorner(g, x1 - R, y0, R, true, false, y0, hs, top, bottom);
+			gradientCorner(g, x1 - R, y1 - R, R, true, true, y0, hs, top, bottom);
+			gradientCorner(g, x0, y1 - R, R, false, true, y0, hs, top, bottom);
 		}
 		g.pop();
 	}
 
+	/** A rounded corner of a gradient rect, drawn in a few horizontal slices, each in the colour of its rows. */
+	private static void gradientCorner(Gfx g, int x, int y, int r, boolean flipX, boolean flipY, int top, int hs, int ct, int cb) {
+		int i = 0;
+		while (i < CORNER_SIZES.length - 1 && CORNER_SIZES[i] < r) i++;
+		int n = Math.min(r, 4);
+		for (int k = 0; k < n; k++) {
+			int ya = y + k * r / n, yb = y + (k + 1) * r / n;
+			if (yb <= ya) continue;
+			float f0 = (ya - y) / (float) r, f1 = (yb - y) / (float) r;
+			float v0 = flipY ? 1 - f0 : f0, v1 = flipY ? 1 - f1 : f1;
+			int color = Theme.lerp(ct, cb, ((ya + yb) / 2f - top) / hs);
+			g.blit(CORNERS[i], x, ya, r, yb - ya, flipX ? 1 : 0, v0, flipX ? 0 : 1, v1, color);
+		}
+	}
+
+	/** A plain vertical gradient over whole screen pixels (inside a 1/scale pose). */
+	private static void vRamp(Gfx g, int x0, int y0, int x1, int y1, int top, int bottom) {
+		if (x1 <= x0 || y1 <= y0) return;
+		if (top == bottom || y1 - y0 == 1) {
+			g.fill(x0, y0, x1, y1, top);
+		} else if ((top >>> 24) == 255) {
+			// opaque top: the top colour, with the bottom colour fading in over it (exact)
+			g.fill(x0, y0, x1, y1, top);
+			g.blit(VRAMP, x0, y0, x1 - x0, y1 - y0, 0, 0, 1, 1, bottom);
+		} else {
+			// see-through: one fades out while the other fades in (exact when either end is clear)
+			g.blit(VRAMP, x0, y0, x1 - x0, y1 - y0, 0, 1, 1, 0, top);
+			g.blit(VRAMP, x0, y0, x1 - x0, y1 - y0, 0, 0, 1, 1, bottom);
+		}
+	}
+
 	/** Outline only (nothing filled inside), {@code thicknessPx} screen pixels wide, anti-aliased. */
 	public static void ring(Gfx g, float x, float y, float w, float h, float r, int color, float thicknessPx) {
+		if (w <= 0 || h <= 0 || (color >>> 24) == 0 || thicknessPx <= 0) return;
+		int s = scale();
+		int x0 = Math.round(x * s), y0 = Math.round(y * s), x1 = Math.round((x + w) * s), y1 = Math.round((y + h) * s);
+		if (x1 <= x0 || y1 <= y0) return;
+		int R = clamp(Math.round(r * s), Math.min(x1 - x0, y1 - y0) / 2);
+		if (R > 32) {
+			ringRows(g, x, y, w, h, r, color, thicknessPx);
+			return;
+		}
+		int t = thicknessPx <= 1.25f ? 1 : 2;
+		if (thicknessPx < t) color = Theme.alpha(color, thicknessPx / t);
+		g.push();
+		g.scale(1f / s);
+		if (R < t) {
+			g.fill(x0, y0, x1, y0 + t, color);
+			g.fill(x0, y1 - t, x1, y1, color);
+			g.fill(x0, y0 + t, x0 + t, y1 - t, color);
+			g.fill(x1 - t, y0 + t, x1, y1 - t, color);
+		} else {
+			g.fill(x0 + R, y0, x1 - R, y0 + t, color);
+			g.fill(x0 + R, y1 - t, x1 - R, y1, color);
+			g.fill(x0, y0 + R, x0 + t, y1 - R, color);
+			g.fill(x1 - t, y0 + R, x1, y1 - R, color);
+			int u = RING_X[t - 1][R - 1], v = RING_Y[t - 1][R - 1];
+			float u0 = u / 256f, v0 = v / 256f, u1 = (u + R) / 256f, v1 = (v + R) / 256f;
+			g.blit(RING, x0, y0, R, R, u0, v0, u1, v1, color);
+			g.blit(RING, x1 - R, y0, R, R, u1, v0, u0, v1, color);
+			g.blit(RING, x1 - R, y1 - R, R, R, u1, v1, u0, v0, color);
+			g.blit(RING, x0, y1 - R, R, R, u0, v1, u1, v0, color);
+		}
+		g.pop();
+	}
+
+	/** The old row-by-row ring, kept for very large radii (rare). */
+	private static void ringRows(Gfx g, float x, float y, float w, float h, float r, int color, float thicknessPx) {
 		int s = scale();
 		float t = thicknessPx;
 		float x0 = x * s, y0 = y * s, ws = w * s, hs = h * s, rs = Math.min(r * s, Math.min(ws, hs) / 2);
@@ -265,9 +364,16 @@ public final class Ui {
 		if (x1 <= x0 || y1 <= y0) return;
 		g.push();
 		g.scale(1f / s);
-		for (int col = x0; col < x1; col++) g.fill(col, y0, col + 1, y1, Theme.lerp(left, right, (col + 0.5f - x0) / (x1 - x0)));
+		if ((left >>> 24) == 255) {
+			g.fill(x0, y0, x1, y1, left);
+			g.blit(HRAMP, x0, y0, x1 - x0, y1 - y0, 0, 0, 1, 1, right);
+		} else {
+			g.blit(HRAMP, x0, y0, x1 - x0, y1 - y0, 1, 0, 0, 1, left);
+			g.blit(HRAMP, x0, y0, x1 - x0, y1 - y0, 0, 0, 1, 1, right);
+		}
 		g.pop();
 	}
+
 
 	// ------------------------------------------------------------------ text & icons
 

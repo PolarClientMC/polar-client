@@ -418,11 +418,19 @@ public final class Cosmetics {
 	/** Every cosmetic, in catalogue order; empty until the launcher has sent the catalogue. */
 	public static List<Entry> entries() {
 		Map<String, Item> c = catalog;
+		if (c == null) return Collections.emptyList();
+		if (c == entriesOf) return entries;
 		List<Entry> out = new ArrayList<>();
-		if (c != null) for (Item it : c.values()) out.add(new Entry(it));
+		for (Item it : c.values()) out.add(new Entry(it));
 		out.sort((a, b) -> a.name.compareToIgnoreCase(b.name));
-		return out;
+		entries = Collections.unmodifiableList(out);
+		entriesOf = c;
+		return entries;
 	}
+
+	// the sorted list is built once per catalogue, not every frame
+	private static volatile List<Entry> entries = Collections.emptyList();
+	private static volatile Map<String, Item> entriesOf;
 
 	public static boolean catalogReady() {
 		return catalog != null;

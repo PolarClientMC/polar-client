@@ -72,6 +72,9 @@ public final class ViewScreen extends Screen {
 			case GLFW.GLFW_KEY_C: k = KeyInput.Key.C; break;
 			case GLFW.GLFW_KEY_V: k = KeyInput.Key.V; break;
 			case GLFW.GLFW_KEY_X: k = KeyInput.Key.X; break;
+			case GLFW.GLFW_KEY_Z: k = KeyInput.Key.Z; break;
+			case GLFW.GLFW_KEY_Y: k = KeyInput.Key.Y; break;
+			case GLFW.GLFW_KEY_G: k = KeyInput.Key.G; break;
 			default: k = KeyInput.Key.OTHER;
 		}
 		return new KeyInput(k, hasShiftDown(), hasControlDown(), Keys.get(PolarKey.MENU).matches(code, scanCode));

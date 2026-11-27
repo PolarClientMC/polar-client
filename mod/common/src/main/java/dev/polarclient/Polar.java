@@ -46,6 +46,7 @@ public final class Polar {
 			if (!p.screenOpen()) p.open(new HudEditorView(null));
 		}
 		CombatTracker.tick();
+		dev.polarclient.world.SessionStats.tick(p);
 		for (Module m : modules.all()) {
 			try {
 				m.tick();
@@ -67,6 +68,7 @@ public final class Polar {
 	/** System/server messages (each version calls this from its chat hook). {@code overlay} = action bar. */
 	public static void onGameMessage(String text, boolean overlay) {
 		if (modules == null || text == null) return;
+		if (!overlay && Platform.get() != null) dev.polarclient.world.SessionStats.onGameMessage(Platform.get(), text);
 		for (Module m : modules.all()) {
 			try {
 				m.onGameMessage(text, overlay);

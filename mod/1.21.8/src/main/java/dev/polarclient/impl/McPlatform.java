@@ -871,4 +871,67 @@ public final class McPlatform extends Platform {
 		KeyMapping k = Keys.get(key);
 		return k.isUnbound() ? null : k.getTranslatedKeyMessage().getString();
 	}
+
+	// ------------------------------------------------------------------ pause menu
+
+	@Override
+	public boolean hasPolarPauseMenu() {
+		return true;
+	}
+
+	@Override
+	public String serverName() {
+		ServerData sd = mc().getCurrentServer();
+		return sd == null ? null : sd.name;
+	}
+
+	@Override
+	public String worldName() {
+		return mc().getSingleplayerServer() == null ? null : mc().getSingleplayerServer().getWorldData().getLevelName();
+	}
+
+	@Override
+	public boolean openAdvancements(Object parent) {
+		if (player() == null || mc().getConnection() == null) return false;
+		mc().setScreen(new net.minecraft.client.gui.screens.advancements.AdvancementsScreen(mc().getConnection().getAdvancements()));
+		return true;
+	}
+
+	@Override
+	public boolean openStatistics(Object parent) {
+		if (player() == null) return false;
+		mc().setScreen(new net.minecraft.client.gui.screens.achievement.StatsScreen((Screen) parent, player().getStats()));
+		return true;
+	}
+
+	@Override
+	public boolean canOpenToLan() {
+		return mc().getSingleplayerServer() != null && !mc().getSingleplayerServer().isPublished();
+	}
+
+	@Override
+	public void openToLan(Object parent) {
+		mc().setScreen(new net.minecraft.client.gui.screens.ShareToLanScreen((Screen) parent));
+	}
+
+	@Override
+	public void leaveWorld() {
+		Minecraft mc = mc();
+		boolean local = mc.isLocalServer();
+		if (mc.level != null) mc.disconnectWithProgressScreen();
+		net.minecraft.client.gui.screens.TitleScreen title = new net.minecraft.client.gui.screens.TitleScreen();
+		mc.setScreen(local ? title : new net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen(title));
+	}
+
+	// ------------------------------------------------------------------ modifier keys (GLFW / LWJGL codes)
+
+	@Override
+	public boolean shiftDown() {
+		return InputConstants.isKeyDown(mc().getWindow().getWindow(), 340) || InputConstants.isKeyDown(mc().getWindow().getWindow(), 344);
+	}
+
+	@Override
+	public boolean controlDown() {
+		return InputConstants.isKeyDown(mc().getWindow().getWindow(), 341) || InputConstants.isKeyDown(mc().getWindow().getWindow(), 345) || InputConstants.isKeyDown(mc().getWindow().getWindow(), 343) || InputConstants.isKeyDown(mc().getWindow().getWindow(), 347);
+	}
 }

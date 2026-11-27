@@ -2,10 +2,12 @@ package dev.polarclient.impl.mixin;
 
 import dev.polarclient.Polar;
 import dev.polarclient.gui.MultiplayerView;
+import dev.polarclient.gui.PauseView;
 import dev.polarclient.gui.TitleView;
 import dev.polarclient.impl.ViewScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Gui;
+import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
@@ -24,6 +26,7 @@ public abstract class GuiMixin {
 		if (screen == null && menu && Minecraft.getInstance().level == null) return new ViewScreen(new TitleView());
 		if (screen == null) return null;
 		if (screen.getClass() == TitleScreen.class && menu) return new ViewScreen(new TitleView());
+		if (screen.getClass() == PauseScreen.class && PauseView.replaces(screen)) return new ViewScreen(new PauseView());
 		if (screen.getClass() == JoinMultiplayerScreen.class && Polar.modules().client.customServerList.on()) {
 			return new ViewScreen(new MultiplayerView(((JoinMultiplayerScreenAccessor) screen).polar$lastScreen()));
 		}

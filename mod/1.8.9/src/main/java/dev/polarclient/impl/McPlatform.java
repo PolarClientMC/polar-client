@@ -833,4 +833,16 @@ public final class McPlatform extends Platform {
 		int code = Keys.get(key).getCode();
 		return code == 0 ? null : net.minecraft.client.option.GameOptions.getFormattedNameForKeyCode(code);
 	}
+
+	// ------------------------------------------------------------------ modifier keys (GLFW / LWJGL codes)
+
+	@Override
+	public boolean shiftDown() {
+		return org.lwjgl.input.Keyboard.isKeyDown(42) || org.lwjgl.input.Keyboard.isKeyDown(54);
+	}
+
+	@Override
+	public boolean controlDown() {
+		return org.lwjgl.input.Keyboard.isKeyDown(29) || org.lwjgl.input.Keyboard.isKeyDown(157) || org.lwjgl.input.Keyboard.isKeyDown(219) || org.lwjgl.input.Keyboard.isKeyDown(220);
+	}
 }

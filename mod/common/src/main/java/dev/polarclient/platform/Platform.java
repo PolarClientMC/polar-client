@@ -358,4 +358,53 @@ public abstract class Platform {
 
 	/** The key a Polar key bind is set to, as shown in Controls (e.g. "Y"), or null when it isn't bound. */
 	public abstract String polarKeyName(PolarKey key);
+
+	// ------------------------------------------------------------------ pause menu (versions without them keep vanilla's)
+
+	/** Name of the server in the player's list (e.g. "HazeSMP"), or null. */
+	public String serverName() {
+		return null;
+	}
+
+	/** Name of the singleplayer world, or null. */
+	public String worldName() {
+		return null;
+	}
+
+	/** Opens Advancements over {@code parent}; false when this version can't. */
+	public boolean openAdvancements(Object parent) {
+		return false;
+	}
+
+	/** Opens Statistics over {@code parent}; false when this version can't. */
+	public boolean openStatistics(Object parent) {
+		return false;
+	}
+
+	/** Whether the singleplayer world can be opened to LAN right now. */
+	public boolean canOpenToLan() {
+		return false;
+	}
+
+	public void openToLan(Object parent) {
+	}
+
+	/** Leaves the world (saving it in singleplayer) and goes to the title or server list, as vanilla's button does. */
+	public void leaveWorld() {
+	}
+
+	/** Shift held right now (for Shift-click). */
+	public boolean shiftDown() {
+		return false;
+	}
+
+	/** Ctrl (or Cmd on macOS) held right now. */
+	public boolean controlDown() {
+		return false;
+	}
+
+	/** Whether this version swaps the vanilla pause screen for Polar's. */
+	public boolean hasPolarPauseMenu() {
+		return false;
+	}
 }

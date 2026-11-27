@@ -83,6 +83,9 @@ public final class ViewScreen extends Screen {
 		else if (code == InputConstants.KEY_C) k = KeyInput.Key.C;
 		else if (code == InputConstants.KEY_V) k = KeyInput.Key.V;
 		else if (code == InputConstants.KEY_X) k = KeyInput.Key.X;
+		else if (code == InputConstants.KEY_Z) k = KeyInput.Key.Z;
+		else if (code == InputConstants.KEY_Y) k = KeyInput.Key.Y;
+		else if (code == InputConstants.KEY_G) k = KeyInput.Key.G;
 		else k = KeyInput.Key.OTHER;
 		return new KeyInput(k, e.hasShiftDown(), e.hasControlDownWithQuirk(), Keys.get(dev.polarclient.platform.PolarKey.MENU).matches(e));
 	}

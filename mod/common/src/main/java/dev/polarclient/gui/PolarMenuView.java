@@ -83,6 +83,13 @@ public class PolarMenuView extends View {
 		if (page == Page.HUD_EDITOR) page = Page.MODS;
 	}
 
+	/** Opens on the Cosmetics page (the pause menu's Wardrobe tile). */
+	public static PolarMenuView cosmetics(Object parent) {
+		PolarMenuView v = new PolarMenuView(parent);
+		v.page = Page.COSMETICS;
+		return v;
+	}
+
 	/** Opens straight into one module's settings (right-click in the HUD editor). */
 	public PolarMenuView(Object parent, Module module) {
 		this(parent);

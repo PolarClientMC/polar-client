@@ -412,7 +412,7 @@ public class PolarMenuView extends View {
 			int a = Math.round(255 * expand);
 			Ui.rect(g, NAV_X, ay, iw, 30, 8, Draw.alpha(0xFF0A162E, Math.round(a * 0.85f)));
 			Ui.ring(g, NAV_X, ay, iw, 30, 8, Draw.alpha(0xFFA0C8FF, Math.round(a * 0.12f)), 1f);
-			g.playerHead(p().userId(), p().userName(), NAV_X + 6, ay + 6, 18);
+			if (p().userId() != null) g.playerHead(p().userId(), p().userName(), NAV_X + 6, ay + 6, 18);
 			String name = p().userName() == null ? "Player" : p().userName();
 			Ui.textMid(g, Fonts.ellipsize(name, Fonts.BOLD, Math.round(iw - 34)), NAV_X + 29, ay + 11, Draw.alpha(0xFFFFFFFF, a), Fonts.BOLD);
 			Ui.textMid(g, "Polar Client " + Polar.version(), NAV_X + 29, ay + 21, Draw.alpha(0xFFB9C9DE, a), Fonts.SMALL);
@@ -840,7 +840,7 @@ public class PolarMenuView extends View {
 		Ui.rect(g, x + 0.65f, y + 0.65f, w - 1.3f, h - 1.3f, 5.8f, 0xF0081931);
 		float head = 46;
 		Ui.glow(g, x + 14 + head / 2f, y + 18 + head / 2f, head * 0.8f, head * 0.8f, Theme.alpha(c.highlight, 0.18f));
-		g.playerHead(p().userId(), p().userName(), x + 14, y + 18, head);
+		if (p().userId() != null) g.playerHead(p().userId(), p().userName(), x + 14, y + 18, head);
 		String name = p().userName();
 		Ui.text(g, name, x + 74, y + 22, c.text, Fonts.TITLE);
 		Ui.text(g, "Signed in on Minecraft " + p().minecraftVersion(), x + 74, y + 39, c.muted, Fonts.SMALL);

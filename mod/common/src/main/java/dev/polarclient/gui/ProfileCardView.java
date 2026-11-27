@@ -84,7 +84,7 @@ public class ProfileCardView extends View {
 		}
 		// the face, big, on a soft ice disc
 		Ui.circle(g, x + 40, y + 46, 30, 0x221E5B95);
-		g.playerHead(id, shown, x + 16, y + 22, 48);
+		g.playerHead(id != null ? id : FriendsPanelView.headId(null, shown), shown, x + 16, y + 22, 48);
 		float tx = x + 80;
 		Ui.textMid(g, Fonts.ellipsize(shown == null ? "Player" : shown, Fonts.LARGE, (int) (W - 96)), tx, y + 20, 0xFFFFFFFF, Fonts.LARGE);
 		boolean ch = Ui.inside(mx, my, x + W - 20, y + 6, 14, 14);

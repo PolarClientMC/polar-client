@@ -332,6 +332,7 @@ public final class McGfx implements Gfx {
 
 	@Override
 	public void playerHead(UUID id, String name, float x, float y, float size) {
+		if (id == null) return; // the game can't draw a head without an id
 		Identifier skin = skin(id, name);
 		blitId(skin, x, y, size, size, 8 / 64f, 8 / 64f, 16 / 64f, 16 / 64f, 0xFFFFFFFF);
 		blitId(skin, x, y, size, size, 40 / 64f, 8 / 64f, 48 / 64f, 16 / 64f, 0xFFFFFFFF);

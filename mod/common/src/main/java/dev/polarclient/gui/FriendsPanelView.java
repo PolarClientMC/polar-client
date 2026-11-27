@@ -121,7 +121,7 @@ public class FriendsPanelView extends View {
 
 	private void header(Gfx g, float x, float y, int mx, int my) {
 		UUID me = p().userId();
-		g.playerHead(me, p().userName(), x + 9, y + 9, 20);
+		g.playerHead(me != null ? me : headId(null, p().userName()), p().userName(), x + 9, y + 9, 20);
 		Ui.textMid(g, Fonts.ellipsize(p().userName(), Fonts.BOLD, (int) (W - 70)), x + 35, y + 15, 0xFFFFFFFF, Fonts.BOLD);
 		String st = PolarSocial.myStatus();
 		int si = indexOf(st);
@@ -132,6 +132,21 @@ public class FriendsPanelView extends View {
 		boolean ch = Ui.inside(mx, my, x + W - 22, y + 8, 14, 14);
 		Ui.icon(g, Icon.CLOSE, x + W - 15, y + 15, ch ? 0xFFFFFFFF : MUTED, Fonts.ICON_S);
 		hits.add(new Hit(x + W - 22, y + 8, 14, 14, this::onClose));
+	}
+
+	/**
+	 * The id to draw a head with. Never null: the game can't draw a head without one (it crashed), so a name-only
+	 * player gets the id an offline player of that name would have.
+	 */
+	static UUID headId(String uuid, String name) {
+		if (uuid != null) {
+			try {
+				return UUID.fromString(uuid);
+			} catch (IllegalArgumentException ignored) {
+				// fall through to the name
+			}
+		}
+		return UUID.nameUUIDFromBytes(("OfflinePlayer:" + (name == null ? "" : name)).getBytes(java.nio.charset.StandardCharsets.UTF_8));
 	}
 
 	private static int indexOf(String status) {
@@ -216,7 +231,7 @@ public class FriendsPanelView extends View {
 		if (!in.isEmpty()) {
 			y = groupTitle(g, "Friend requests", x, y);
 			for (final PolarSocial.Request r : in) {
-				g.playerHead(null, r.name, x + 9, y + 3, 11);
+				g.playerHead(headId(r.uuid, r.name), r.name, x + 9, y + 3, 11);
 				Ui.textMid(g, Fonts.ellipsize(r.name, Fonts.BODY, 70), x + 25, y + 8.5f, 0xFFFFFFFF, Fonts.BODY);
 				if (inside) {
 					smallButton(g, Icon.CHECK, null, x + W - 44, y + 3, 16, mx, my, GOOD, () -> act("accept", r.uuid));
@@ -272,13 +287,7 @@ public class FriendsPanelView extends View {
 		float h = 20;
 		boolean hv = inside && Ui.inside(mx, my, x + 4, y, W - 8, h);
 		if (hv) Ui.rect(g, x + 4, y, W - 8, h, 4, 0x22FFFFFF);
-		UUID id = null;
-		try {
-			id = UUID.fromString(f.uuid);
-		} catch (IllegalArgumentException ignored) {
-			// offline profile ids are still uuids; leave it to the name
-		}
-		g.playerHead(id, f.name, x + 9, y + 4, 12);
+		g.playerHead(headId(f.uuid, f.name), f.name, x + 9, y + 4, 12);
 		Ui.circle(g, x + 20, y + 15, 2.4f, 0xFF091328);
 		Ui.circle(g, x + 20, y + 15, 1.8f, statusColor(f.status));
 		Ui.textMid(g, Fonts.ellipsize(f.name, Fonts.BODY, hv ? 62 : 110), x + 26, y + 7, f.online ? 0xFFFFFFFF : 0xFF9AAAC0, Fonts.BODY);
@@ -369,7 +378,7 @@ public class FriendsPanelView extends View {
 		for (final PolarSocial.Friend f : list) {
 			boolean hv = inside && Ui.inside(mx, my, x + 4, y, W - 8, 18);
 			if (hv) Ui.rect(g, x + 4, y, W - 8, 18, 4, 0x22FFFFFF);
-			g.playerHead(null, f.name, x + 9, y + 3, 12);
+			g.playerHead(headId(f.uuid, f.name), f.name, x + 9, y + 3, 12);
 			Ui.textMid(g, Fonts.ellipsize(f.name, Fonts.BODY, 100), x + 26, y + 9, f.unread > 0 ? 0xFFFFFFFF : 0xFFB8C8DE, f.unread > 0 ? Fonts.BOLD : Fonts.BODY);
 			if (f.unread > 0) {
 				String c = String.valueOf(f.unread);
@@ -490,7 +499,7 @@ public class FriendsPanelView extends View {
 			for (final PolarSocial.Member m : party.members) {
 				boolean hv = inside && Ui.inside(mx, my, x + 4, y, W - 8, 18);
 				if (hv) Ui.rect(g, x + 4, y, W - 8, 18, 4, 0x22FFFFFF);
-				g.playerHead(null, m.name, x + 9, y + 3, 12);
+				g.playerHead(headId(m.uuid, m.name), m.name, x + 9, y + 3, 12);
 				Ui.textMid(g, Fonts.ellipsize(m.name, Fonts.BODY, 80), x + 26, y + 9, m.online ? 0xFFFFFFFF : 0xFF9AAAC0, Fonts.BODY);
 				float nx = x + 26 + Math.min(80, Fonts.width(m.name, Fonts.BODY)) + 4;
 				if (m.leader) Ui.icon(g, Icon.STAR, nx + 3, y + 9, GOLD, Fonts.ICON_S);
@@ -546,7 +555,7 @@ public class FriendsPanelView extends View {
 				for (PolarSocial.Request r : party.pending) if (r.uuid.equalsIgnoreCase(f.uuid)) in = true;
 				if (in) continue;
 			}
-			g.playerHead(null, f.name, x + 9, y + 3, 12);
+			g.playerHead(headId(f.uuid, f.name), f.name, x + 9, y + 3, 12);
 			Ui.textMid(g, Fonts.ellipsize(f.name, Fonts.BODY, 90), x + 26, y + 9, 0xFFFFFFFF, Fonts.BODY);
 			if (inside) smallButton(g, null, "Invite", x + W - 44, y + 3, 36, mx, my, GOOD, () -> {
 				JsonObject b = new JsonObject();

@@ -198,6 +198,7 @@ public final class McGfx implements Gfx {
 
 	@Override
 	public void playerHead(UUID id, String name, float x, float y, float size) {
+		if (id == null) return; // the game can't draw a head without an id
 		if (HEADS.size() > 64) HEADS.clear();
 		net.minecraft.client.gui.components.PlayerFaceRenderer.draw(g, net.minecraft.client.resources.DefaultPlayerSkin.get(id), (int) x, (int) y, (int) size);
 	}

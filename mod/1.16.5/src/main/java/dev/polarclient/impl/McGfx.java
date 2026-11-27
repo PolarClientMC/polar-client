@@ -335,6 +335,7 @@ public final class McGfx implements Gfx {
 
 	@Override
 	public void playerHead(UUID id, String name, float x, float y, float size) {
+		if (id == null) return; // the game can't draw a head without an id
 		ResourceLocation skin = skin(id, name);
 		flush();
 		mc().getTextureManager().bind(skin);

@@ -13,7 +13,9 @@ public class ClientSettingsModule extends Module {
 	public final BooleanSetting amoled = add(new BooleanSetting("amoled", "Pure black (AMOLED) menus", true));
 	public final BooleanSetting customMainMenu = add(new BooleanSetting("custom_main_menu", "Polar main menu", true));
 	public final BooleanSetting customServerList = add(new BooleanSetting("custom_server_list", "Polar server list", true));
+	public final BooleanSetting customPauseMenu = add(new BooleanSetting("custom_pause_menu", "Polar pause menu", true));
 	public final BooleanSetting snow = add(new BooleanSetting("snow", "Snowfall on the main menu", true));
+	public final ModeSetting seasonal = add(new ModeSetting("seasonal", "Seasonal main menu (Christmas)", "Auto", "Auto", "Always", "Off"));
 	public final BooleanSetting windowTitle = add(new BooleanSetting("window_title", "\"Polar Client\" window title", true));
 	public final BooleanSetting hideHudInDebug = add(new BooleanSetting("hide_hud_in_debug", "Hide mods while F3 is open", true));
 	public final BooleanSetting menuBlur = add(new BooleanSetting("menu_blur", "Blur behind the mod menu", true));

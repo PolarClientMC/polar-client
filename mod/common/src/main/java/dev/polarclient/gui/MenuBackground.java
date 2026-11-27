@@ -11,7 +11,8 @@ import java.util.Random;
  * The animated Polar main-menu backdrop: a pre-rendered voxel night scene in two parallax layers
  * (sky and landscape) with live aurora, aurora reflection on the ice, twinkling stars, a glowing moon,
  * flickering village lights, glints on the ice, drifting mist, snowfall and the odd shooting star.
- * Coordinates inside the layers are texture pixels of the 1920x1080 renders.
+ * Coordinates inside the layers are texture pixels of the 1920x1080 renders. In season it also wears the
+ * {@link Christmas} dress (tree, sleigh, garland, more snow).
  */
 public final class MenuBackground {
 	public static final MenuBackground INSTANCE = new MenuBackground();
@@ -32,8 +33,9 @@ public final class MenuBackground {
 	private float px, py; // smoothed mouse parallax
 	private final Random random = new Random(42);
 
-	private static final int FLAKES = 150;
-	private final float[] fx = new float[FLAKES], fy = new float[FLAKES], fz = new float[FLAKES], fphase = new float[FLAKES];
+	private static final int FLAKES = 150, FLAKES_XMAS = 230;
+	private final float[] fx = new float[FLAKES_XMAS], fy = new float[FLAKES_XMAS], fz = new float[FLAKES_XMAS], fphase = new float[FLAKES_XMAS],
+		fvx = new float[FLAKES_XMAS];
 	private boolean flakesReady;
 	private float shootingAt = 6f, shootX, shootY;
 
@@ -45,6 +47,8 @@ public final class MenuBackground {
 		float dt = Math.min(0.1f, (now - last) / 1e9f);
 		last = now;
 		float t = (now - start) / 1e9f;
+		boolean xmas = Christmas.active();
+		float ct = Christmas.time();
 		px += ((mouseX / (float) Math.max(1, w) - 0.5f) - px) * Math.min(1, dt * 2.5f);
 		py += ((mouseY / (float) Math.max(1, h) - 0.5f) - py) * Math.min(1, dt * 2.5f);
 
@@ -70,6 +74,13 @@ public final class MenuBackground {
 		drawLights(g, t);
 		drawSparkles(g, t);
 		drawMist(g, t);
+		if (xmas) {
+			Christmas.drawNear(g, ct);
+			float nearX = -px * 16 + driftX, nearY = -py * 8 + driftY;
+			Christmas.starOnScreen(w / 2f + nearX + (Christmas.starTexX - TW / 2f) * k, h / 2f + nearY + (Christmas.starTexY - TH / 2f) * k, 16);
+		} else {
+			Christmas.starOnScreen(0, 0, 0);
+		}
 		g.pop();
 
 		// ---- screen space: legibility shading, then the moon (kept bright, it sits in open sky), shooting star, snow
@@ -80,9 +91,11 @@ public final class MenuBackground {
 		Ui.hGradient(g, w - edge, 0, edge, h, 0x00000000, 0x46000000);
 		begin(g, w, h, k, farX, farY);
 		drawMoon(g, moonPulse);
+		if (xmas) Christmas.drawSleigh(g, ct);
 		g.pop();
 		drawShootingStar(g, w, h, t);
-		if (Polar.modules() == null || Polar.modules().client.snow.on()) drawSnow(g, w, h, dt, t);
+		if (Polar.modules() == null || Polar.modules().client.snow.on()) drawSnow(g, w, h, dt, t, xmas, mouseX, mouseY);
+		if (xmas) Christmas.drawGarland(g, w, ct);
 	}
 
 	private void begin(Gfx g, int w, int h, float k, float ox, float oy) {
@@ -93,7 +106,7 @@ public final class MenuBackground {
 	}
 
 	/** Soft glow sprite in the current (texture-pixel) space. */
-	private static void glow(Gfx g, float cx, float cy, float rx, float ry, int argb) {
+	static void glow(Gfx g, float cx, float cy, float rx, float ry, int argb) {
 		if ((argb >>> 24) == 0) return;
 		g.push();
 		g.translate(cx, cy);
@@ -206,18 +219,26 @@ public final class MenuBackground {
 		fx[i] = random.nextFloat() * w;
 		fy[i] = anywhere ? random.nextFloat() * h : -6;
 		fphase[i] = random.nextFloat() * 6.283f;
+		fvx[i] = 0;
 	}
 
-	private void drawSnow(Gfx g, int w, int h, float dt, float t) {
+	private void drawSnow(Gfx g, int w, int h, float dt, float t, boolean xmas, int mouseX, int mouseY) {
 		if (!flakesReady) {
-			for (int i = 0; i < FLAKES; i++) resetFlake(i, w, h, true);
+			for (int i = 0; i < FLAKES_XMAS; i++) resetFlake(i, w, h, true);
 			flakesReady = true;
 		}
-		for (int i = 0; i < FLAKES; i++) {
+		int n = xmas ? FLAKES_XMAS : FLAKES;
+		for (int i = 0; i < n; i++) {
 			float z = fz[i];
 			float speed = 6 + z * z * 34;
 			fy[i] += speed * dt;
-			fx[i] += ((float) Math.sin(t * (0.6f + z) + fphase[i]) * (4 + z * 10) - 3) * dt;
+			// at Christmas the cursor pushes nearby flakes aside
+			if (xmas && mouseX >= 0) {
+				float dx = fx[i] - mouseX, dy = fy[i] - mouseY, d2 = dx * dx + dy * dy;
+				if (d2 < 900) fvx[i] += dx / (float) Math.sqrt(d2 + 1) * 160 * dt * (1 - d2 / 900);
+			}
+			fvx[i] *= (float) Math.pow(0.1, dt);
+			fx[i] += ((float) Math.sin(t * (0.6f + z) + fphase[i]) * (4 + z * 10) - 3 + fvx[i]) * dt;
 			if (fy[i] > h + 8 || fx[i] < -8 || fx[i] > w + 8) {
 				resetFlake(i, w, h, false);
 				continue;

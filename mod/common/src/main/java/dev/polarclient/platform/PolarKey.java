@@ -4,7 +4,7 @@ package dev.polarclient.platform;
 public enum PolarKey {
 	MENU("menu"), HUD_EDITOR("hud_editor"), ZOOM("zoom"), FREELOOK("freelook"), COPY_COORDS("copy_coordinates"),
 	ADD_WAYPOINT("add_waypoint"), WAYPOINTS("waypoints"), HITBOXES("hitboxes"), JOIN_INVITE("join_invite"),
-	WORLD_MAP("world_map"), FRIENDS("friends"), PROFILE("profile");
+	WORLD_MAP("world_map"), FRIENDS("friends"), PROFILE("profile"), OUTFITS("outfits"), TOGGLE_COSMETICS("toggle_cosmetics");
 
 	public final String id;
 

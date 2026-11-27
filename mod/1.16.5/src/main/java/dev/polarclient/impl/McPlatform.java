@@ -994,6 +994,15 @@ public final class McPlatform extends Platform {
 	}
 
 	@Override
+	public int polarKeyHeldRaw(dev.polarclient.platform.PolarKey key) {
+		net.minecraft.client.KeyMapping m = Keys.get(key);
+		if (m == null) return -1;
+		InputConstants.Key k = net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper.getBoundKeyOf(m);
+		if (k == null || k.getType() != InputConstants.Type.KEYSYM || k.getValue() < 0) return -1;
+		return InputConstants.isKeyDown(mc().getWindow().getWindow(), k.getValue()) ? 1 : 0;
+	}
+
+	@Override
 	public String[] crosshairPlayer() {
 		net.minecraft.world.entity.Entity e = mc().crosshairPickEntity;
 		if (!(e instanceof net.minecraft.world.entity.player.Player) || e == player()) return null;

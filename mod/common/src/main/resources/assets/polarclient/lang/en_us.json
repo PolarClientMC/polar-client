@@ -11,5 +11,7 @@
 	"key.polarclient.join_invite": "Join Friend's Invite",
 	"key.polarclient.world_map": "World Map",
 	"key.polarclient.friends": "Friends",
-	"key.polarclient.profile": "Your Profile"
+	"key.polarclient.profile": "Player Profile (look at them)",
+	"key.polarclient.outfits": "Outfit Wheel (hold)",
+	"key.polarclient.toggle_cosmetics": "Other Players' Cosmetics"
 }

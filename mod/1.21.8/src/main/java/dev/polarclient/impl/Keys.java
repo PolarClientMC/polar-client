@@ -30,6 +30,8 @@ public final class Keys {
 		add(PolarKey.WORLD_MAP, InputConstants.KEY_M);
 		add(PolarKey.FRIENDS, InputConstants.KEY_O);
 		add(PolarKey.PROFILE, InputConstants.KEY_P);
+		add(PolarKey.OUTFITS, InputConstants.KEY_G);
+		add(PolarKey.TOGGLE_COSMETICS, InputConstants.UNKNOWN.getValue());
 	}
 
 	private static void add(PolarKey key, int defaultKey) {

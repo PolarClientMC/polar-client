@@ -140,7 +140,7 @@ public class ProfileCardView extends View {
 		final String theirId = s(profile, "uuid");
 		float by = y + H - 30, bw3 = (W - 36) / 3f;
 		if (me) {
-			button(g, "Open wardrobe", x + 12, by, W - 24, mx, my, true, () -> p().open(PolarMenuView.cosmetics(p().currentScreen())));
+			button(g, "Open wardrobe", x + 12, by, W - 24, mx, my, true, () -> p().open(new WardrobeView(p().currentScreen())));
 		} else if ("friends".equals(friend)) {
 			String server = profile.has("where") && profile.get("where").isJsonObject() && "server".equals(s(profile.getAsJsonObject("where"), "state"))
 					? s(profile.getAsJsonObject("where"), "server") : null;

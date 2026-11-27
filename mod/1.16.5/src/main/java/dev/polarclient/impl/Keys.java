@@ -29,6 +29,8 @@ public final class Keys {
 		add(PolarKey.WORLD_MAP, GLFW.GLFW_KEY_M);
 		add(PolarKey.FRIENDS, GLFW.GLFW_KEY_O);
 		add(PolarKey.PROFILE, GLFW.GLFW_KEY_P);
+		add(PolarKey.OUTFITS, GLFW.GLFW_KEY_G);
+		add(PolarKey.TOGGLE_COSMETICS, GLFW.GLFW_KEY_UNKNOWN);
 	}
 
 	private static void add(PolarKey key, int defaultKey) {

@@ -831,6 +831,8 @@ public class PolarMenuView extends View {
 
 	private float[] skinButton, profileSaveButton, exportButton, importButton;
 
+	private float[] wardrobeButton;
+
 	private void drawCosmetics(Gfx g, float mx, float my, Pal c, Theme t) {
 		drawHeader(g, "Cosmetics", "Your skin, cape and how other players see you.", c);
 		float x = gridX(), y = GRID_Y - 18, w = contentW() - PAD - 7.6f, h = 82;
@@ -848,9 +850,10 @@ public class PolarMenuView extends View {
 		Ui.rect(g, x, ny, w, 46, 6.4f, c.cardBorder);
 		Ui.rect(g, x + 0.65f, ny + 0.65f, w - 1.3f, 46 - 1.3f, 5.8f, 0xF0081931);
 		Ui.icon(g, Icon.AUTO_AWESOME, x + 16, ny + 15, c.highlight, Fonts.ICON_M);
-		Ui.text(g, "Skins and capes", x + 28, ny + 12.5f, c.text, Fonts.BOLD);
-		Ui.text(g, "Upload a new skin or pick one of your capes on the Cosmetics page of the Polar launcher.", x + 28, ny + 24, c.muted, Fonts.SMALL);
-		Ui.text(g, "Changes show up for everyone the next time you join a server.", x + 28, ny + 32.5f, c.muted, Fonts.SMALL);
+		Ui.text(g, "Polar wardrobe", x + 28, ny + 12.5f, c.text, Fonts.BOLD);
+		Ui.text(g, "Capes, wings, hats, back items and auras. Try them on in game; only you see what you try.", x + 28, ny + 24, c.muted, Fonts.SMALL);
+		Ui.text(g, "Skins are changed on the Cosmetics page of the Polar launcher.", x + 28, ny + 32.5f, c.muted, Fonts.SMALL);
+		wardrobeButton = button(g, "Open wardrobe", Icon.CHECKROOM, x + w - 92, ny + 8, mx, my, c, true);
 	}
 
 	// ------------------------------------------------------------------ Profiles
@@ -1080,6 +1083,10 @@ public class PolarMenuView extends View {
 	}
 
 	private boolean clickCosmetics(float mx, float my) {
+		if (in(wardrobeButton, mx, my)) {
+			p().open(new WardrobeView(p().currentScreen()));
+			return true;
+		}
 		if (in(skinButton, mx, my)) {
 			p().openSkinOptions(p().currentScreen());
 			return true;

@@ -57,7 +57,8 @@ public final class Cosmetics {
 
 	/** A catalogue entry, as far as the game needs it. */
 	static final class Item {
-		String id, type, model, texture, textureHD;
+		String id, type, model, texture, textureHD, name;
+		boolean special, tint;
 		int frames = 1, frameTime = 100, defaultColor = 0xFFFFFFFF;
 		JsonObject particles;
 	}
@@ -124,7 +125,7 @@ public final class Cosmetics {
 		PolarCosmeticsModule m = module();
 		if (m == null) return false;
 		UUID me = Platform.get() == null ? null : Platform.get().userId();
-		return me != null && me.toString().equals(uuid) ? m.showOwn() : m.showOthers();
+		return me != null && me.toString().equals(uuid) ? m.showOwn() : m.showOthersNow();
 	}
 
 	// ---------------------------------------------------------------- every client tick
@@ -188,6 +189,9 @@ public final class Cosmetics {
 				Item it = new Item();
 				it.id = str(j, "id");
 				it.type = str(j, "type");
+				it.name = j.has("name") ? str(j, "name") : it.id;
+				it.special = j.has("special") && j.get("special").getAsBoolean();
+				it.tint = j.has("tint") && j.get("tint").getAsBoolean();
 				it.model = j.has("model") ? str(j, "model") : null;
 				it.texture = j.has("texture") ? str(j, "texture") : null;
 				it.textureHD = j.has("textureHD") ? str(j, "textureHD") : null;
@@ -386,8 +390,78 @@ public final class Cosmetics {
 	private static Look look(UUID uuid) {
 		if (uuid == null || !on()) return null;
 		String key = uuid.toString();
+		Look preview = PREVIEW;
+		if (preview != null && Platform.get() != null && key.equals(String.valueOf(Platform.get().userId()))) return preview;
 		if (!shows(key)) return null;
 		return LOOKS.get(key);
+	}
+
+	// ---------------------------------------------------------------- the wardrobe in game
+
+	/** What you see on yourself while the wardrobe or outfit wheel is open (tried on, not saved), or null. */
+	private static volatile Look PREVIEW;
+
+	/** One catalogue entry for the wardrobe. */
+	public static final class Entry {
+		public final String id, type, name;
+		public final boolean special, tint;
+
+		Entry(Item it) {
+			id = it.id;
+			type = it.type;
+			name = it.name;
+			special = it.special;
+			tint = it.tint;
+		}
+	}
+
+	/** Every cosmetic, in catalogue order; empty until the launcher has sent the catalogue. */
+	public static List<Entry> entries() {
+		Map<String, Item> c = catalog;
+		List<Entry> out = new ArrayList<>();
+		if (c != null) for (Item it : c.values()) out.add(new Entry(it));
+		out.sort((a, b) -> a.name.compareToIgnoreCase(b.name));
+		return out;
+	}
+
+	public static boolean catalogReady() {
+		return catalog != null;
+	}
+
+	public static boolean signedIn() {
+		return signedIn;
+	}
+
+	/** Shows these items (slot to id) on you until {@link #endPreview}; loads their files. */
+	public static void preview(Map<String, String> slots) {
+		Map<String, Item> c = catalog;
+		if (c == null) return;
+		Look look = new Look(true);
+		for (Map.Entry<String, String> e : slots.entrySet()) {
+			Item it = c.get(e.getValue());
+			if (it == null) continue;
+			look.items.put(e.getKey(), it.id);
+			look.colors.put(e.getKey(), it.defaultColor);
+			final Item fit = it;
+			if (!ASSETS.containsKey(it.id)) IO.execute(() -> load(fit));
+		}
+		UUID me = Platform.get() == null ? null : Platform.get().userId();
+		Look mine = me == null ? null : LOOKS.get(me.toString());
+		if (mine != null) look.tags.addAll(mine.tags);
+		PREVIEW = look;
+	}
+
+	public static void endPreview() {
+		PREVIEW = null;
+	}
+
+	/** After you saved a new look: ask the server again so you (and the game) see it. */
+	public static void refreshMine() {
+		UUID me = Platform.get() == null ? null : Platform.get().userId();
+		if (me != null) {
+			ASKED.remove(me.toString());
+			nextLookup = 0;
+		}
 	}
 
 	private static Asset asset(Look look, String slot) {

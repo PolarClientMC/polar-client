@@ -11,6 +11,10 @@ import dev.polarclient.setting.NumberSetting;
  */
 public class PolarCosmeticsModule extends Module {
 	private final BooleanSetting others = add(new BooleanSetting("show_others", "Show other players' cosmetics", true));
+	/** Shown / Hidden in fights / Hidden. "Hidden in fights" starts at the first hit given or taken and ends 10 s after. */
+	public final dev.polarclient.setting.ModeSetting othersMode = add(new dev.polarclient.setting.ModeSetting("others_mode", "Other players' cosmetics",
+			"Shown", "Shown", "Hidden in fights", "Hidden"));
+	private long lastHurt;
 	private final BooleanSetting own = add(new BooleanSetting("show_own", "Show my cosmetics", true));
 	private final BooleanSetting auras = add(new BooleanSetting("auras", "Show auras", true));
 	private final BooleanSetting badges = add(new BooleanSetting("badges", "Show the Polar badge next to names", true));
@@ -24,6 +28,30 @@ public class PolarCosmeticsModule extends Module {
 
 	boolean showOthers() {
 		return others.on();
+	}
+
+	/** Whether other players' cosmetics are drawn right now (the old on/off switch still counts as Hidden). */
+	boolean showOthersNow() {
+		if (!others.on()) return false;
+		String m = othersMode.get();
+		if ("Hidden".equals(m)) return false;
+		if ("Hidden in fights".equals(m)) {
+			long since = Math.min(dev.polarclient.util.CombatTracker.msSinceLastHit(), System.currentTimeMillis() - lastHurt);
+			return since > 10_000;
+		}
+		return true;
+	}
+
+	/** The Controls key: Shown, Hidden in fights, Hidden, round again. */
+	public void cycleOthers() {
+		String[] modes = {"Shown", "Hidden in fights", "Hidden"};
+		String m = othersMode.get();
+		int i = 0;
+		for (int k = 0; k < modes.length; k++) if (modes[k].equals(m)) i = k;
+		othersMode.set(modes[(i + 1) % modes.length]);
+		if (!others.on()) others.toggle();
+		dev.polarclient.Polar.saveConfig();
+		dev.polarclient.util.Popups.show("Other players' cosmetics: " + othersMode.get(), 0xFF5AD8FF, 2000);
 	}
 
 	boolean showOwn() {
@@ -54,6 +82,11 @@ public class PolarCosmeticsModule extends Module {
 
 	@Override
 	public void tick() {
+		if (p().hasPlayer() && p().damageTilt() > 0) lastHurt = System.currentTimeMillis();
+		while (p().consumePolarKey(dev.polarclient.platform.PolarKey.TOGGLE_COSMETICS)) cycleOthers();
+		while (p().consumePolarKey(dev.polarclient.platform.PolarKey.OUTFITS)) {
+			if (isEnabled() && p().inWorld() && !p().screenOpen() && dev.polarclient.account.LauncherBridge.available()) p().open(new dev.polarclient.gui.OutfitWheelView(null));
+		}
 		Cosmetics.tick();
 	}
 }

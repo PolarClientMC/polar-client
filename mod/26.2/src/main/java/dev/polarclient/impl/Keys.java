@@ -31,6 +31,8 @@ public final class Keys {
 		add(PolarKey.WORLD_MAP, InputConstants.KEY_M, category);
 		add(PolarKey.FRIENDS, InputConstants.KEY_O, category);
 		add(PolarKey.PROFILE, InputConstants.KEY_P, category);
+		add(PolarKey.OUTFITS, InputConstants.KEY_G, category);
+		add(PolarKey.TOGGLE_COSMETICS, InputConstants.UNKNOWN.getValue(), category);
 	}
 
 	private static void add(PolarKey key, int defaultKey, KeyMapping.Category category) {

@@ -438,6 +438,14 @@ public abstract class Platform {
 		return null;
 	}
 
+	/**
+	 * Whether a Polar key is physically held right now, even while a screen is open: 1 held, 0 not, -1 when this version
+	 * can't tell (then hold-to-use screens work as press-to-open, press-to-close).
+	 */
+	public int polarKeyHeldRaw(PolarKey key) {
+		return -1;
+	}
+
 	/** The other player under the crosshair: {uuid, name}, or null. */
 	public String[] crosshairPlayer() {
 		return null;

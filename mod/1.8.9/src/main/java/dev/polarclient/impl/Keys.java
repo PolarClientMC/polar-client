@@ -28,6 +28,8 @@ public final class Keys {
 		add(PolarKey.WORLD_MAP, Keyboard.KEY_M);
 		add(PolarKey.FRIENDS, Keyboard.KEY_O);
 		add(PolarKey.PROFILE, Keyboard.KEY_P);
+		add(PolarKey.OUTFITS, Keyboard.KEY_G);
+		add(PolarKey.TOGGLE_COSMETICS, Keyboard.KEY_NONE);
 	}
 
 	private Keys() {

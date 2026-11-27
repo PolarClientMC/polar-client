@@ -255,7 +255,7 @@ public class PauseView extends View {
 
 	private void tile(int i, Object me) {
 		if (i == 0) p().open(new HudEditorView(me));
-		else if (i == 1) p().open(PolarMenuView.cosmetics(me));
+		else if (i == 1) p().open(new WardrobeView(me));
 		else {
 			try {
 				OsOpen.folder(FabricLoader.getInstance().getGameDir().resolve("screenshots").toFile());

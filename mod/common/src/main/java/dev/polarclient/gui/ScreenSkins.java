@@ -211,18 +211,20 @@ public final class ScreenSkins {
 		return null;
 	}
 
-	/** A button: primary (light), plain (glass) or a danger one; dimmed while the game keeps it inactive. */
+	/** A button with the game's 1 px bevel: primary (ice), or plain glass; dimmed while the game keeps it inactive. */
 	private static void button(Gfx g, Widget w, String label, boolean primary, int mx, int my, float a) {
 		boolean hv = w.active && Ui.inside(mx, my, w.x, w.y, w.w, w.h);
 		float k = w.active ? a : a * 0.45f;
-		float r = Math.min(5, w.h / 3f);
+		float r = 2;
 		if (primary) {
 			Ui.gradientRect(g, w.x, w.y, w.w, w.h, r, Theme.alpha(hv ? 0xFFFFFFFF : 0xFFD7EEFF, k), Theme.alpha(0xFF8FCBFF, k));
-			Ui.ring(g, w.x, w.y, w.w, w.h, r, Theme.alpha(0xD9EAF6FF, k), 1f);
 		} else {
-			Ui.rect(g, w.x, w.y, w.w, w.h, r, Theme.alpha(hv ? 0xD91E3868 : 0xC80C1A38, k));
-			Ui.ring(g, w.x, w.y, w.w, w.h, r, Theme.alpha(hv ? 0xD9CFE9FF : 0x669CC9FF, k), 1f);
+			Ui.rect(g, w.x, w.y, w.w, w.h, r, Theme.alpha(hv ? 0xE01E3868 : 0xD00C1A38, k));
 		}
+		// bevel: light along the top, shade along the bottom
+		Ui.rect(g, w.x + 1, w.y + 1, w.w - 2, 1, 0, Theme.alpha(primary ? 0xCCFFFFFF : 0x40FFFFFF, k));
+		Ui.rect(g, w.x + 1, w.y + w.h - 2, w.w - 2, 1, 0, Theme.alpha(primary ? 0x405A8FC8 : 0x66000000, k));
+		Ui.ring(g, w.x, w.y, w.w, w.h, r, Theme.alpha(primary ? 0xE6EAF6FF : hv ? 0xD9CFE9FF : 0x809CC9FF, k), 1f);
 		UiFont f = w.h >= 18 ? (primary ? Fonts.BOLD : Fonts.BODY) : Fonts.SMALL;
 		Ui.textCentered(g, Fonts.ellipsize(label, f, (int) (w.w - 8)), w.x + w.w / 2f, w.y + w.h / 2f, Theme.alpha(primary ? 0xFF0B1A33 : 0xFFFFFFFF, k), f);
 	}

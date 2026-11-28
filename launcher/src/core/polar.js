@@ -12,7 +12,7 @@ const crypto = require('node:crypto');
 const path = require('node:path');
 
 const UUID = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i;
-const FILE = /^(catalog\.json|badge\.png|(models|textures|thumbs)\/[a-z0-9_]+\.(json|png))$/;
+const FILE = /^(catalog\.json|badge\.png|(models|textures|thumbs|tags)\/[a-z0-9_]+\.(json|png))$/;
 const LOOKUP_TTL = 60 * 1000;
 const PING_EVERY = 25 * 1000;
 const SYNC_FILES = ['polarclient.json', 'polarclient-waypoints.json'];
@@ -327,7 +327,7 @@ class PolarService {
 
   // ---------------------------------------------------------------- cosmetics files
 
-  /** A cosmetics file (catalog.json, models/…, textures/…, thumbs/…): from the disk cache, checked once per session. */
+  /** A cosmetics file (catalog.json, models/…, textures/…, thumbs/…, tags/…): from the disk cache, checked once per session. */
   async file(rel) {
     if (!FILE.test(rel)) throw new PolarError('No such file', 404);
     const file = path.join(this.cacheDir, ...rel.split('/'));

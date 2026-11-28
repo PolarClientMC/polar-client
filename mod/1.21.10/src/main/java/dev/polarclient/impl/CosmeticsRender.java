@@ -22,7 +22,8 @@ import java.util.UUID;
 
 /** Draws Polar cosmetics (quads made by {@link dev.polarclient.cosmetics.Cosmetics}) and the Polar badge. */
 public final class CosmeticsRender {
-	private static final FontDescription BADGE_FONT = new FontDescription.Resource(ResourceLocation.fromNamespaceAndPath("polarclient", "badge")); 
+	private static final FontDescription BADGE_FONT = new FontDescription.Resource(ResourceLocation.fromNamespaceAndPath("polarclient", "badge"));
+	private static final FontDescription TAGS_FONT = new FontDescription.Resource(ResourceLocation.fromNamespaceAndPath("polarclient", "tags")); 
 	private static final int FULL_BRIGHT = 0xF000F0;
 
 	private CosmeticsRender() {
@@ -90,15 +91,18 @@ public final class CosmeticsRender {
 		return Component.empty().append(badge).append(" ").append(name);
 	}
 
-	/** Append code-only Polar name tags on the right side of the name. */
+	/** Polar name tags after the name: animated badges from the polarclient:tags font (PolarTags). */
 	public static Component tagged(Component name, UUID uuid) {
 		List<String> tags = dev.polarclient.cosmetics.Cosmetics.tags(uuid);
 		if (tags.isEmpty()) return name;
 		Component out = name.copy();
+		long now = System.currentTimeMillis();
 		for (String id : tags) {
 			PolarTags.Def def = PolarTags.get(id);
 			if (def == null) continue;
-			out = out.copy().append(Component.literal(" " + def.icon).withStyle(s -> s.withColor(def.color).withBold(false).withItalic(false)));
+			String glyph = def.frame(now, uuid.hashCode());
+			out = out.copy().append(Component.literal(" ").withStyle(s -> s.withBold(false)))
+				.append(Component.literal(glyph).withStyle(s -> s.withFont(TAGS_FONT).withColor(ChatFormatting.WHITE).withBold(false).withItalic(false)));
 		}
 		return out;
 	}

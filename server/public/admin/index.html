@@ -46,6 +46,12 @@
   .tag.on { color: var(--good); border-color: rgba(61, 220, 151, .4); }
   .tag.bad { color: var(--bad); border-color: rgba(255, 92, 122, .4); }
   .tag.gold { color: var(--gold); border-color: rgba(244, 197, 66, .4); }
+  .nametags { display: flex; flex-wrap: wrap; gap: 8px; }
+  .nametag { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 8px; background: transparent; border: 1px solid var(--line); border-radius: 8px; opacity: .55; }
+  .nametag.on { opacity: 1; border-color: rgba(61, 220, 151, .5); }
+  .nametag img { height: 22px; image-rendering: pixelated; }
+  .nametag-state { font-size: 11px; color: var(--dim); }
+  .nametag.on .nametag-state { color: var(--good); }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
   th { color: var(--dim); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
@@ -348,6 +354,15 @@ function renderPlayer(p) {
         h('td', { class: 'muted' }, when(g.created)),
         h('td', { style: 'text-align:right' }, h('button', { class: 'ghost', type: 'button', onclick: () => act('revoke', { player: p.uuid, item: g.item }, `Took ${itemName(g.item)} back.`) }, 'Take back'))))))
         : h('div', { class: 'muted' }, 'None yet.'),
+      h('h3', { style: 'font-size:13px;margin:14px 0 6px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em' }, 'Name tags'),
+      h('div', { class: 'muted', style: 'font-size:12px;margin-bottom:6px' }, 'Click a tag to give it or take it back. They pick which one to show in their wardrobe.'),
+      h('div', { class: 'nametags' }, ...(p.allTags || []).map((t) => {
+        const has = (p.tags || []).includes(t.id);
+        return h('button', { type: 'button', class: `nametag${has ? ' on' : ''}`, title: `${t.label}: ${t.means || ''}`,
+          onclick: () => act(has ? 'tags/revoke' : 'tags/grant', { player: p.uuid, tag: t.id }, has ? `Took the ${t.label} tag from ${p.name}.` : `Gave ${p.name} the ${t.label} tag.`) },
+          t.image ? h('img', { src: `/cosmetics/${t.image}`, alt: t.label }) : h('span', {}, t.label),
+          h('span', { class: 'nametag-state' }, has ? 'Given' : 'Give'));
+      })),
       h('div', { class: 'row', style: 'margin-top:12px' },
         h('label', { style: 'flex:1' }, 'Give a cosmetic', grantSel),
         h('button', { type: 'button', onclick: () => {

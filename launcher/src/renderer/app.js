@@ -2289,16 +2289,16 @@ function renderWardrobeTagTab() {
     const on = active === t.id;
     return h('button', {
       class: `wr-item${on ? ' on' : ''}${has ? '' : ' locked'}`,
-      title: has ? `Use ${t.label} tag` : `${t.label} is code-only. Ask a Polar admin to grant it.`,
+      title: has ? `Use the ${t.label} tag` : `The ${t.label} tag is given by Polar's team.`,
       onclick: () => {
-        if (!has) { toast(`${t.label} is code-only. Ask a Polar admin to grant it.`, 'info'); return; }
+        if (!has) { toast(`The ${t.label} tag is given by Polar's team.`, 'info'); return; }
         wr.draft.activeTag = on ? '' : t.id;
         renderWardrobe();
       }
     },
-      h('div', { class: 'wr-thumb', style: `font-size:28px;color:${t.color || '#fff'}` }, t.icon || '◆'),
-      h('div', { class: 'wr-name', text: t.label || t.id }),
-      h('div', { class: 'wr-rarity' }, has ? (on ? 'Selected' : 'Granted') : 'Code-only'));
+      h('div', { class: 'wr-thumb wr-tag-thumb' }, tagPicture(t)),
+      h('div', { class: 'wr-name', text: t.means || t.label || t.id }),
+      h('div', { class: 'wr-rarity' }, has ? (on ? 'Selected' : 'Granted') : 'Given by Polar'));
   }));
 }
 
@@ -2312,7 +2312,16 @@ function renderWrNamePreview() {
   el.replaceChildren();
   if (showBadge) el.appendChild(h('img', { src: 'assets/badge.png', alt: '', style: 'width:18px;height:18px;vertical-align:-3px;margin-right:6px;object-fit:contain;image-rendering:pixelated' }));
   el.appendChild(h('span', { style: 'color:#fff', text: name }));
-  if (tag) el.appendChild(h('span', { style: `color:${tag.color || '#fff'};margin-left:8px`, text: tag.icon || '◆' }));
+  if (tag) el.appendChild(h('span', { style: 'margin-left:8px;display:inline-block;vertical-align:-4px' }, tagPicture(tag, 20)));
+}
+
+/** A name tag's badge picture (drawn by tools/cosmetics/tags.py), or its colour and symbol if there's no picture. */
+function tagPicture(t, height = 26) {
+  const fallback = () => h('span', { style: `font-size:${Math.round(height * 0.9)}px;color:${t.color || '#fff'}`, text: t.icon || '◆' });
+  if (!t.image) return fallback();
+  const img = h('img', { src: COS_BASE + t.image, alt: t.label || '', style: `height:${height}px;image-rendering:pixelated` });
+  img.onerror = () => img.replaceWith(fallback());
+  return img;
 }
 
 async function equip(it) {

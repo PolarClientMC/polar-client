@@ -109,7 +109,8 @@ public class ProfileCardView extends View {
 			float bw = Fonts.width(label, Fonts.SMALL) + 10;
 			Ui.rect(g, tx, ly - 5, bw, 10, 3, Theme.alpha(c, 0.25f));
 			Ui.textMid(g, label, tx + 5, ly, c, Fonts.SMALL);
-			Ui.textMid(g, meaning(s(tag, "id")), tx + bw + 5, ly, MUTED, Fonts.SMALL);
+			String means = s(tag, "means");
+			Ui.textMid(g, means.isEmpty() ? meaning(s(tag, "id")) : means, tx + bw + 5, ly, MUTED, Fonts.SMALL);
 			ly += 12;
 		}
 		String status = s(profile, "status");

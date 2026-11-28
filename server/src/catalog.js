@@ -607,7 +607,7 @@ export default {
   },
   {
    "id": "head_vexcraft_crown",
-   "name": "VexCraft Void Crown",
+   "name": "VexCraft Crown",
    "type": "head",
    "special": true
   },

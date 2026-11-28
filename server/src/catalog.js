@@ -489,6 +489,12 @@ export default {
    "special": true
   },
   {
+   "id": "wings_vexcraft",
+   "name": "VexCraft Wings",
+   "type": "wings",
+   "special": true
+  },
+  {
    "id": "head_halo",
    "name": "Golden Halo",
    "type": "head"
@@ -596,6 +602,12 @@ export default {
   {
    "id": "head_hazesmp_crown",
    "name": "HazeSMP Tide Crown",
+   "type": "head",
+   "special": true
+  },
+  {
+   "id": "head_vexcraft_crown",
+   "name": "VexCraft Void Crown",
    "type": "head",
    "special": true
   },
@@ -714,6 +726,18 @@ export default {
   {
    "id": "aura_hazesmp_trail",
    "name": "HazeSMP Trail",
+   "type": "aura",
+   "special": true
+  },
+  {
+   "id": "aura_vexcraft_trail",
+   "name": "VexCraft Trail",
+   "type": "aura",
+   "special": true
+  },
+  {
+   "id": "aura_vexcraft_aura",
+   "name": "VexCraft Lifesteal Aura",
    "type": "aura",
    "special": true
   }

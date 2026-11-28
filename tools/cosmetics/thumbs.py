@@ -26,7 +26,9 @@ CAMERAS = {'cape': ('200:6:1.55', 0.92), 'wings': ('200:10:0.64', 1.28), 'head':
 SIZE = (320, 400)
 PER_PAGE = 12  # browsers allow about 16 WebGL canvases per page
 # cosmetics shown in another pose or camera than their kind's (wings that fold away would look tiny in their card)
-OVERRIDES = {'wings_hazesmp': {'pose': 'glide', 'views': '200:12:0.56'}}
+OVERRIDES = {'wings_hazesmp': {'pose': 'glide', 'views': '200:12:0.56'}, 'wings_vexcraft': {'pose': 'glide', 'views': '200:12:0.56'},
+             # a trail only shows while walking
+             'aura_vexcraft_trail': {'walk': 1, 'views': '100:18:0.85'}}
 
 
 def serve():
@@ -48,16 +50,18 @@ def main(only):
         browser = p.chromium.launch(args=['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'])
         for kind, (kind_views, ty) in CAMERAS.items():
             mine = [i for i in items if i['type'] == kind]
-            setups = sorted({(OVERRIDES.get(i['id'], {}).get('pose', ''), OVERRIDES.get(i['id'], {}).get('views', kind_views)) for i in mine})
-            for pose, views in setups:
-                group = [i for i in mine if (OVERRIDES.get(i['id'], {}).get('pose', ''), OVERRIDES.get(i['id'], {}).get('views', kind_views)) == (pose, views)]
+            def setup(i):
+                o = OVERRIDES.get(i['id'], {})
+                return o.get('pose', ''), o.get('views', kind_views), o.get('walk', 0)
+            for pose, views, walk in sorted({setup(i) for i in mine}):
+                group = [i for i in mine if setup(i) == (pose, views, walk)]
                 for start in range(0, len(group), PER_PAGE):
                     chunk = group[start:start + PER_PAGE]
                     page = browser.new_page(viewport={'width': 1400, 'height': 900})
                     page.add_init_script(f'window.SKIN = {json.dumps(skin)};')
                     sets = ';'.join(i['id'] for i in chunk)
                     page.goto(f'http://127.0.0.1:{port}/tools/cosmetics/preview/index.html?sets={sets}&views={views}&size={SIZE[0]}&ty={ty}'
-                              f"&boost={2.5 if kind == 'aura' else 1}" + (f'&pose={pose}' if pose else ''))
+                              f"&boost={2.5 if kind == 'aura' else 1}&walk={walk}" + (f'&pose={pose}' if pose else ''))
                     page.wait_for_function('window.ready === true', timeout=60000)
                     page.wait_for_timeout(300)
                     page.evaluate('window.stepAll(1/30, 75)')

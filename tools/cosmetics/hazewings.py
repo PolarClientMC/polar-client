@@ -210,8 +210,9 @@ class _Bone:
         return b
 
 
-def skeleton():
-    """The left wing's bones with their cards (bone-local model px; rest pose = straight out, everything at 0)."""
+def skeleton(feather=feather, coverts=coverts):
+    """The left wing's bones with their cards (bone-local model px; rest pose = straight out, everything at 0).
+    feather / coverts paint the cards (another set can reuse this wing's build and motion with its own art)."""
     s = SCALE
     base = _Bone('base', SHOULDER)            # tilts the whole wing back (outermost, so it's a plain tilt)
     wing = base.add(_Bone('wing', (0, 0, 0)))
@@ -423,10 +424,14 @@ def physics_left():
 # ================================================================ writing it out
 
 class HazeWings:
-    """wings.build() calls build(out, name); returns the model dict."""
+    """wings.build() calls build(out, name); returns the model dict. skeleton: the left wing's bones with their
+    painted cards (another set can pass its own painters to skeleton() and keep this wing's build and motion)."""
+
+    def __init__(self, skeleton_fn=None):
+        self.skeleton_fn = skeleton_fn
 
     def build(self, out_dir, name):
-        left = skeleton()
+        left = (self.skeleton_fn or skeleton)()
         cards = []
 
         def collect(b):

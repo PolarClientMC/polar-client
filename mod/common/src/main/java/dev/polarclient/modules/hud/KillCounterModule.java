@@ -7,7 +7,6 @@ import dev.polarclient.setting.TextSetting;
 import dev.polarclient.util.Popups;
 
 import java.util.List;
-import java.util.Locale;
 
 /** Kills this session, read from death messages that name you. */
 public class KillCounterModule extends TextHudModule {
@@ -21,6 +20,8 @@ public class KillCounterModule extends TextHudModule {
 		popupText.visibleWhen(() -> popup.on());
 	}
 
+	private int session = -1;
+
 	public int kills() {
 		return kills;
 	}
@@ -28,10 +29,7 @@ public class KillCounterModule extends TextHudModule {
 	@Override
 	public void onGameMessage(String text, boolean overlay) {
 		if (!isEnabled() || overlay) return;
-		String me = p().userName();
-		if (me == null || me.isEmpty() || text.startsWith(me) || text.startsWith("<")) return;
-		String lower = text.toLowerCase(Locale.ROOT), meL = me.toLowerCase(Locale.ROOT);
-		if (!(lower.contains("by " + meL) || lower.contains("fighting " + meL) || lower.contains("killed by " + meL))) return;
+		if (!dev.polarclient.world.SessionStats.isKill(text, p().userName())) return;
 		kills++;
 		String victim = text.split(" ")[0];
 		if (popup.on()) Popups.show(popupText.get().replace("{player}", victim), 0xFFFF6B6B, 2200);
@@ -40,7 +38,12 @@ public class KillCounterModule extends TextHudModule {
 
 	@Override
 	public void tick() {
-		if (!p().inWorld()) kills = 0;
+		// same session rules as the pause menu: a lobby-to-game move on a server network keeps the count
+		int now = dev.polarclient.world.SessionStats.session();
+		if (now != session) {
+			session = now;
+			kills = 0;
+		}
 	}
 
 	@Override

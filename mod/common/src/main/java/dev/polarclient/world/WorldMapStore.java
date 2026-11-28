@@ -57,7 +57,8 @@ public final class WorldMapStore {
 
 	/** The tiles of a world's dimension, loading them from disk the first time. Never null. */
 	public static Map<Long, Tile> of(String worldId, String dimension) {
-		String k = worldId + "|" + dimension;
+		final String dim = dimKey(dimension);
+		String k = worldId + "|" + dim;
 		Map<Long, Tile> m = MAPS.get(k);
 		if (m == null) {
 			final Map<Long, Tile> fresh = new ConcurrentHashMap<Long, Tile>();
@@ -65,7 +66,7 @@ public final class WorldMapStore {
 			MAPS.put(k, m);
 			// read the saved map off the game thread; what's been seen since joining wins
 			DISK.execute(() -> {
-				Map<Long, Tile> saved = load(worldId, dimension);
+				Map<Long, Tile> saved = load(worldId, dim);
 				for (Map.Entry<Long, Tile> e : saved.entrySet()) fresh.putIfAbsent(e.getKey(), e.getValue());
 				revision++;
 			});
@@ -80,6 +81,15 @@ public final class WorldMapStore {
 		t.setPriority(Thread.MIN_PRIORITY);
 		return t;
 	});
+
+	/**
+	 * One name per dimension, however it's spelled: the game says "overworld", the map screen asks for
+	 * "minecraft:overworld". Mixing the two left the map empty (recorded under one name, looked up under the other).
+	 */
+	static String dimKey(String dimension) {
+		if (dimension == null) return "";
+		return dimension.startsWith("minecraft:") ? dimension.substring("minecraft:".length()) : dimension;
+	}
 
 	/** Whether anything was ever recorded there. */
 	public static boolean explored(String worldId, String dimension) {
@@ -98,7 +108,8 @@ public final class WorldMapStore {
 		}
 		if (w == null) return;
 		String dim = p.dimension();
-		if (dim == null) return;
+		if (dim == null || dim.isEmpty()) return;
+		dim = dimKey(dim);
 		Map<Long, Tile> tiles = of(w, dim);
 		int scanY = p.dimensionHasCeiling() ? (int) Math.floor(p.playerY()) + 1 : Integer.MIN_VALUE;
 		int pcx = (int) Math.floor(p.playerX()) >> 4, pcz = (int) Math.floor(p.playerZ()) >> 4;

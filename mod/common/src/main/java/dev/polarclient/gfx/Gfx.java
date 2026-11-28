@@ -52,6 +52,11 @@ public interface Gfx {
 	/** Draws a texture created at runtime (a server favicon from {@link dev.polarclient.platform.ServerBackend}). */
 	void blitHandle(Object texture, float x, float y, float w, float h);
 
+	/** {@link #blitHandle(Object, float, float, float, float)}, tinted ARGB (alpha fades it). */
+	default void blitHandle(Object texture, float x, float y, float w, float h, int argb) {
+		blitHandle(texture, x, y, w, h);
+	}
+
 	void text(String s, float x, float y, int argb, UiFont font, boolean shadow);
 
 	/** Text in Minecraft's own font (with shadow if asked). */

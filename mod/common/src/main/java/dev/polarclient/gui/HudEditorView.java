@@ -551,19 +551,56 @@ public class HudEditorView extends View {
 		return Theme.alpha(argb, ((argb >>> 24) / 255f) * Math.min(1, chrome));
 	}
 
+	/** One tile of the dot grid (8 x 8 dots), made for the current GUI scale and drawn over and over. */
+	private static Object gridTile;
+	private static int gridTileScale, gridTileDot;
+	private static final int DOTS_PER_TILE = 8;
+
 	private void drawGrid(Gfx g, int w, int h, float alpha) {
 		int s = Math.max(1, Math.round(p().guiScale() * fk));
 		int c = Theme.alpha(0xFFC8E6FF, alpha);
 		int d = Math.max(1, Math.round(s * 0.6f));
+		Object tile = gridTile(s, d);
 		g.push();
 		g.scale(1f / s);
-		for (int x = 8; x < w; x += 8) {
-			for (int y = 8; y < h; y += 8) {
-				int px = x * s - d / 2, py = y * s - d / 2;
-				g.fill(px, py, px + d, py + d, c);
+		if (tile != null) {
+			// ~130 textured quads instead of one fill per dot (8,000+ at GUI scale 2 on a 1080p screen)
+			int t = 8 * s * DOTS_PER_TILE;
+			for (int x = 0; x < w * s; x += t) for (int y = 0; y < h * s; y += t) g.blitHandle(tile, x, y, t, t, c);
+		} else {
+			for (int x = 8; x < w; x += 8) {
+				for (int y = 8; y < h; y += 8) {
+					int px = x * s - d / 2, py = y * s - d / 2;
+					g.fill(px, py, px + d, py + d, c);
+				}
 			}
 		}
 		g.pop();
+	}
+
+	private Object gridTile(int s, int d) {
+		if (gridTile != null && gridTileScale == s && gridTileDot == d) return gridTile;
+		int t = 8 * s * DOTS_PER_TILE;
+		if (gridTile != null) p().destroyTexture(gridTile);
+		gridTile = p().createTexture("hud_grid", t, t);
+		gridTileScale = s;
+		gridTileDot = d;
+		if (gridTile == null) return null;
+		int[] px = new int[t * t];
+		// a dot centred on every grid point; the ones on the tile's edges wrap round so tiles join up
+		for (int i = 0; i < DOTS_PER_TILE; i++) {
+			for (int j = 0; j < DOTS_PER_TILE; j++) {
+				int cx = i * 8 * s - d / 2, cy = j * 8 * s - d / 2;
+				for (int a = 0; a < d; a++) {
+					for (int b = 0; b < d; b++) {
+						int x = Math.floorMod(cx + a, t), y = Math.floorMod(cy + b, t);
+						px[y * t + x] = 0xFFFFFFFF;
+					}
+				}
+			}
+		}
+		p().uploadTexture(gridTile, px);
+		return gridTile;
 	}
 
 	/** In a preview the real hotbar isn't in the frame: draw its outline so you can see what you're working around. */

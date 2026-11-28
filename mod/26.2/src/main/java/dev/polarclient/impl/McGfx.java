@@ -131,6 +131,11 @@ public final class McGfx implements Gfx {
 	}
 
 	@Override
+	public void blitHandle(Object texture, float x, float y, float w, float h, int argb) {
+		if (texture instanceof Identifier id) blitId(id, x, y, w, h, 0, 0, 1, 1, argb);
+	}
+
+	@Override
 	public void text(String s, float x, float y, int argb, UiFont font, boolean shadow) {
 		Component c = styled(s, font);
 		int ix = (int) Math.floor(x), iy = (int) Math.floor(y);

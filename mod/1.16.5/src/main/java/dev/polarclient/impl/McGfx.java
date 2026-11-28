@@ -233,6 +233,11 @@ public final class McGfx implements Gfx {
 	}
 
 	@Override
+	public void blitHandle(Object texture, float x, float y, float w, float h, int argb) {
+		if (texture instanceof ResourceLocation) blitId((ResourceLocation) texture, x, y, w, h, 0, 0, 1, 1, argb);
+	}
+
+	@Override
 	public void text(String s, float x, float y, int argb, UiFont font, boolean shadow) {
 		// the font treats alpha below 4 as opaque, so skip what should be invisible
 		if ((argb >>> 24) < 4 || s.isEmpty()) return;

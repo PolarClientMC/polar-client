@@ -350,6 +350,14 @@ public abstract class Platform {
 	/** The ids of the players in the current world (the ones the game knows about, near you). Empty outside a world. */
 	public abstract java.util.List<UUID> worldPlayerIds();
 
+	/**
+	 * Other players the game is showing near you, for the minimap: only ones it already knows about (in entity range),
+	 * never invisible players or spectators. Empty outside a world.
+	 */
+	public java.util.List<NearbyPlayer> nearbyPlayers() {
+		return java.util.Collections.emptyList();
+	}
+
 	/** Shows a line in chat for you only (not sent anywhere). Formatting codes (section sign) allowed. */
 	public abstract void chatLine(String text);
 

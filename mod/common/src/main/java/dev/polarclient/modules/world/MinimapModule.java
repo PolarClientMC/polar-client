@@ -7,18 +7,24 @@ import dev.polarclient.gui.ui.Icon;
 import dev.polarclient.gui.ui.Ui;
 import dev.polarclient.module.Category;
 import dev.polarclient.module.HudModule;
+import dev.polarclient.platform.NearbyPlayer;
 import dev.polarclient.setting.BooleanSetting;
+import dev.polarclient.setting.ModeSetting;
 import dev.polarclient.setting.NumberSetting;
 import dev.polarclient.util.Draw;
 import dev.polarclient.world.MinimapImage;
 import dev.polarclient.world.Waypoint;
 import dev.polarclient.world.WaypointStore;
 
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * A light minimap: the ground around you coloured like a vanilla map, your Polar waypoints and last death on it, north
- * up or turning with you. In the Nether it shows the floor at your height instead of the roof. No entity radar.
+ * up or turning with you. In the Nether it shows the floor at your height instead of the roof. Other players show as
+ * dots, but only the ones the game is already showing you (in entity range, not invisible, not sneaking unless they're
+ * a Polar friend), and never past the map's edge.
  */
 public class MinimapModule extends HudModule {
 	private static final int BACKGROUND = 0xCC0B1426, BORDER = 0xFF1A2B4C;
@@ -29,6 +35,10 @@ public class MinimapModule extends HudModule {
 	public final BooleanSetting waypoints = add(new BooleanSetting("waypoints", "Waypoints", true));
 	public final BooleanSetting death = add(new BooleanSetting("death", "Last death", true));
 	public final BooleanSetting coordinates = add(new BooleanSetting("coordinates", "Coordinates", true));
+	public final ModeSetting players = add(new ModeSetting("players", "Players near me", "Everyone", "Everyone", "Friends", "Off"));
+	public final BooleanSetting playerNames = add(new BooleanSetting("player_names", "Player names", false));
+
+	private static final int FRIEND = 0xFF3DDC84, OTHER = 0xFFFFFFFF;
 
 	private final MinimapImage image = new MinimapImage();
 	private Object texture;
@@ -36,7 +46,8 @@ public class MinimapModule extends HudModule {
 	private int builtX = Integer.MIN_VALUE, builtZ, sinceBuild;
 
 	public MinimapModule() {
-		super("minimap", "Minimap", "A small map with your waypoints.", Category.WORLD, false, 366, 4);
+		super("minimap", "Minimap", "A small map with your waypoints and the players near you.", Category.WORLD, false, 366, 4);
+		playerNames.visibleWhen(() -> !players.is("Off"));
 	}
 
 	private int mapSize() {
@@ -148,6 +159,7 @@ public class MinimapModule extends HudModule {
 				marker(g, (Math.floor(d[0]) + 0.5 - px) * z, (Math.floor(d[2]) + 0.5 - pz) * z, cos, sin, half, edge, Draw.DANGER, Icon.SKULL);
 			}
 		}
+		if (!players.is("Off")) drawPlayers(g, px, pz, z, cos, sin, half, edge);
 		// north
 		float nx = half + (float) (sin * edge), ny = half - (float) (cos * edge);
 		g.fill(Math.round(nx) - 4, Math.round(ny) - 4, Math.round(nx) + 4, Math.round(ny) + 5, 0xCC0B1426);
@@ -184,6 +196,37 @@ public class MinimapModule extends HudModule {
 		int ix = Math.round(cx), iy = Math.round(cy);
 		g.fill(ix - r - 1, iy - r - 1, ix + r + 1, iy + r + 1, 0xFF000000);
 		g.fill(ix - r, iy - r, ix + r, iy + r, 0xFF000000 | color);
+	}
+
+	/** Other players as dots: green for Polar friends, white for everyone else; faded when far above or below you. */
+	private void drawPlayers(Gfx g, double px, double pz, float z, double cos, double sin, float half, float edge) {
+		Set<String> friends = new HashSet<String>();
+		for (dev.polarclient.social.PolarSocial.Friend f : dev.polarclient.social.PolarSocial.friends()) {
+			if (f.uuid != null) friends.add(f.uuid.replace("-", "").toLowerCase(Locale.ROOT));
+		}
+		boolean friendsOnly = players.is("Friends");
+		double py = p().playerY();
+		for (NearbyPlayer np : p().nearbyPlayers()) {
+			boolean friend = np.id != null && friends.contains(np.id.toString().replace("-", "").toLowerCase(Locale.ROOT));
+			if (friendsOnly && !friend) continue;
+			// a sneaking player's name tag hides behind walls in vanilla, so they stay off the map too (friends excepted)
+			if (np.sneaking && !friend) continue;
+			double dx = (np.x - px) * z, dy = (np.z - pz) * z;
+			double x = dx * cos - dy * sin, y = dx * sin + dy * cos;
+			if (Math.abs(x) > edge || Math.abs(y) > edge) continue;
+			float a = Math.abs(np.y - py) > 10 ? 0.45f : 1f;
+			int ix = Math.round(half + (float) x), iy = Math.round(half + (float) y);
+			int c = friend ? FRIEND : OTHER;
+			g.fill(ix - 2, iy - 2, ix + 2, iy + 2, Draw.alpha(0xFF000000, a));
+			g.fill(ix - 1, iy - 1, ix + 1, iy + 1, Draw.alpha(c, a));
+			if (playerNames.on() && !np.name.isEmpty()) {
+				g.push();
+				g.translate(ix, iy - 3);
+				g.scale(0.5f);
+				g.text(np.name, -Draw.width(np.name) / 2f, -9, Draw.alpha(c, a), true);
+				g.pop();
+			}
+		}
 	}
 
 	private void centred(Gfx g, String text, int y) {

@@ -858,6 +858,18 @@ public final class McPlatform extends Platform {
 	}
 
 	@Override
+	public List<dev.polarclient.platform.NearbyPlayer> nearbyPlayers() {
+		Minecraft mc = Minecraft.getInstance();
+		List<dev.polarclient.platform.NearbyPlayer> out = new ArrayList<>();
+		if (mc.level == null || mc.player == null) return out;
+		for (net.minecraft.world.entity.player.Player pl : mc.level.players()) {
+			if (pl == mc.player || pl.isSpectator() || pl.isInvisibleTo(mc.player)) continue;
+			out.add(new dev.polarclient.platform.NearbyPlayer(pl.getUUID(), pl.getName().getString(), pl.getX(), pl.getY(), pl.getZ(), pl.isCrouching()));
+		}
+		return out;
+	}
+
+	@Override
 	public void chatLine(String text) {
 		Minecraft.getInstance().gui.getChat().addMessage(net.minecraft.network.chat.Component.literal(text));
 	}
